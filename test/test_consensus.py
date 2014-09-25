@@ -40,6 +40,12 @@ class TestConsensus(unittest.TestCase):
         outcome = self.oracle.consensus()
         self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)
 
+    def test_consensus_weighted(self):
+        weights = np.array([[1], [1], [1], [1], [1], [1]])
+        oracle = Oracle(votes=self.votes, weights=weights)
+        outcome = oracle.consensus()
+        self.assertIsNotNone(outcome)
+
     def test_consensus_nans(self):
         votes = np.array([[1, 1, 0, 0],
                           [1, 0, 0, 0],
@@ -47,18 +53,30 @@ class TestConsensus(unittest.TestCase):
                           [1, 1, 1, 0],
                           [0, 0, 1, 1],
                           [0, 0, 1, 1]])
-        self.oracle = Oracle(votes=votes)
-        outcome = self.oracle.consensus()
+        oracle = Oracle(votes=votes)
+        outcome = oracle.consensus()
+        self.assertIsNotNone(outcome)
+
+    def test_consensus_weighted_nans(self):
+        votes = np.array([[1, 1, 0, 0],
+                          [1, 0, 0, 0],
+                          [1, 1, np.nan, 0],
+                          [1, 1, 1, 0],
+                          [0, 0, 1, 1],
+                          [0, 0, 1, 1]])
+        weights = np.array([[1], [1], [1], [1], [1], [1]])
+        oracle = Oracle(votes=votes, weights=weights)
+        outcome = oracle.consensus()
         self.assertIsNotNone(outcome)
 
     def test_consensus_array(self):
-        self.oracle = Oracle(votes=np.array(self.votes))
-        outcome = self.oracle.consensus()
+        oracle = Oracle(votes=np.array(self.votes))
+        outcome = oracle.consensus()
         self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)
 
     def test_consensus_masked_array(self):
-        self.oracle = Oracle(votes=ma.masked_array(self.votes, np.isnan(self.votes)))
-        outcome = self.oracle.consensus()
+        oracle = Oracle(votes=ma.masked_array(self.votes, np.isnan(self.votes)))
+        outcome = oracle.consensus()
         self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)        
 
     def test_consensus_scaled(self):

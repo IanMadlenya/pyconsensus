@@ -43,7 +43,7 @@ from numpy import *
 from numpy.linalg import *
 
 __title__      = "pyconsensus"
-__version__    = "0.1.4"
+__version__    = "0.1.5"
 __author__     = "Paul Sztorc and Jack Peterson"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
@@ -68,7 +68,7 @@ class Oracle(object):
                  catch_p=.1, max_row=5000, verbose=False):
         self.votes = ma.masked_array(votes, isnan(votes))
         self.decision_bounds = decision_bounds
-        self.rep = weights
+        self.weights = weights
         self.catch_p = catch_p
         self.max_row = max_row
         self.verbose = verbose
@@ -163,7 +163,7 @@ class Oracle(object):
         Out = Vec
         Exclude = isnan(Vec)
         Out[Exclude] = 0             # set missing to 0
-        Out = Out / float(sum(Out))  # normalize
+        Out = Out / sum(Out)  # normalize
         return Out
 
     def DemocracyCoin(self, Mat):
@@ -355,7 +355,7 @@ class Oracle(object):
         """
         M0 = self.votes
         Scales = self.decision_bounds
-        Rep = self.rep
+        Rep = self.weights
         CatchP = self.catch_p
         MaxRow = self.max_row
         Verbose = self.verbose
