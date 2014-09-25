@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 """Consensus mechanism for Truthcoin.
 
+pyconsensus is a Python implementation of the Truthcoin consensus mechanism,
+described in detail at https://github.com/psztorc/Truthcoin.
+
 Usage:
 
     from pyconsensus import Oracle
@@ -40,7 +43,7 @@ from numpy import *
 from numpy.linalg import *
 
 __title__      = "pyconsensus"
-__version__    = "0.1"
+__version__    = "0.1.1"
 __author__     = "Paul Sztorc and Jack Peterson"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
