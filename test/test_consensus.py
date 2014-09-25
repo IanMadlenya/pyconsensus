@@ -25,30 +25,39 @@ from pyconsensus import Oracle
 class TestConsensus(unittest.TestCase):
 
     def setUp(self):
-        self.votes = np.array([[1, 1, 0, 0],
-                               [1, 0, 0, 0],
-                               [1, 1, 0, 0],
-                               [1, 1, 1, 0],
-                               [0, 0, 1, 1],
-                               [0, 0, 1, 1]])
-        self.votes = ma.masked_array(self.votes, np.isnan(self.votes))
+        self.votes = [[1, 1, 0, 0],
+                      [1, 0, 0, 0],
+                      [1, 1, 0, 0],
+                      [1, 1, 1, 0],
+                      [0, 0, 1, 1],
+                      [0, 0, 1, 1]]
         self.oracle = Oracle(votes=self.votes)
         self.c = [1, 2, 3, np.nan, 3]
         self.c2 = ma.masked_array(self.c, np.isnan(self.c))
         self.c3 = [2, 3, -1, 4, 0]
 
-    def test_Factory(self):
+    def test_consensus(self):
         outcome = self.oracle.consensus()
         self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)
 
-    def test_Factory_scaled(self):
+    def test_consensus_array(self):
+        self.oracle = Oracle(votes=np.array(self.votes))
+        outcome = self.oracle.consensus()
+        self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)
+
+    def test_consensus_masked_array(self):
+        self.oracle = Oracle(votes=ma.masked_array(self.votes, np.isnan(self.votes)))
+        outcome = self.oracle.consensus()
+        self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)        
+
+    def test_consensus_scaled(self):
         scalar_decision_params = [
             {"scaled": True, "min": 0.1, "max": 0.5},
             {"scaled": True, "min": 0.2, "max": 0.7},
             {"scaled": False, "min": 0, "max": 1},
             {"scaled": False, "min": 0, "max": 1},
         ]
-        oracle = Oracle(votes=self.votes, scales=scalar_decision_params)
+        oracle = Oracle(votes=self.votes, decision_bounds=scalar_decision_params)
         outcome = oracle.consensus()
         self.assertAlmostEquals(outcome["Certainty"], 0.618113325804, places=11)
 

@@ -2,17 +2,28 @@
 # -*- coding: utf-8 -*-
 """Consensus mechanism for Truthcoin.
 
-This is the mechanism that, theoretically:
-  1. Allows the software to determine the state of Decisions truthfully, and
-  2. Only allows an efficient number of most-traded-upon-Decisions.
-
 Usage:
 
-    import numpy as np
     from pyconsensus import Oracle
 
-    oracle = Oracle()
+    # Example vote matrix:
+    #   - each row represents a voter
+    #   - each column represents a decision in a prediction market
+    my_votes = [[1, 1, 0, 0],
+                [1, 0, 0, 0],
+                [1, 1, 0, 0],
+                [1, 1, 1, 0],
+                [0, 0, 1, 1],
+                [0, 0, 1, 1]]
+    my_decision_bounds = [
+        {"scaled": True, "min": 0.1, "max": 0.5},
+        {"scaled": True, "min": 0.2, "max": 0.7},
+        {"scaled": False, "min": 0, "max": 1},
+        {"scaled": False, "min": 0, "max": 1},
+    ]
 
+    oracle = Oracle(votes=my_votes, decision_bounds=my_decision_bounds)
+    oracle.consensus()
 
 """
 from __future__ import division, print_function, unicode_literals, absolute_import
@@ -50,10 +61,10 @@ getcontext().rounding = ROUND_HALF_EVEN
 
 class Oracle(object):
 
-    def __init__(self, votes=None, scales=None, rep=-1,
+    def __init__(self, votes=None, decision_bounds=None, rep=-1,
                  catch_p=.1, max_row=5000, verbose=False):
         self.votes = ma.masked_array(votes, isnan(votes))
-        self.scales = scales
+        self.decision_bounds = decision_bounds
         self.rep = rep
         self.catch_p = catch_p
         self.max_row = max_row
@@ -324,7 +335,6 @@ class Oracle(object):
 
         return Mnew
 
-    # def consensus(self, M0, Scales=None, Rep=-1, CatchP=.1, MaxRow=5000, Verbose=False):
     def consensus(self):
         """
         Args:
@@ -341,7 +351,7 @@ class Oracle(object):
 
         """
         M0 = self.votes
-        Scales = self.scales
+        Scales = self.decision_bounds
         Rep = self.rep
         CatchP = self.catch_p
         MaxRow = self.max_row

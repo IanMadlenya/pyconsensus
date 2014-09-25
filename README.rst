@@ -16,6 +16,30 @@ The easiest way to install pyconsensus is using pip::
 
     pip install pyconsensus
 
+Usage
+^^^^^
+
+    from pyconsensus import Oracle
+
+    # Example vote matrix:
+    #   - each row represents a voter
+    #   - each column represents a decision in a prediction market
+    my_votes = [[1, 1, 0, 0],
+                [1, 0, 0, 0],
+                [1, 1, 0, 0],
+                [1, 1, 1, 0],
+                [0, 0, 1, 1],
+                [0, 0, 1, 1]]
+    my_decision_bounds = [
+        {"scaled": True, "min": 0.1, "max": 0.5},
+        {"scaled": True, "min": 0.2, "max": 0.7},
+        {"scaled": False, "min": 0, "max": 1},
+        {"scaled": False, "min": 0, "max": 1},
+    ]
+
+    oracle = Oracle(votes=my_votes, decision_bounds=my_decision_bounds)
+    oracle.consensus()
+
 Tests
 ^^^^^
 
