@@ -43,7 +43,7 @@ from numpy import *
 from numpy.linalg import *
 
 __title__      = "pyconsensus"
-__version__    = "0.1.5"
+__version__    = "0.1.6"
 __author__     = "Paul Sztorc and Jack Peterson"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
