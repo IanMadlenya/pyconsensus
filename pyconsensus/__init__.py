@@ -43,7 +43,7 @@ from numpy import *
 from numpy.linalg import *
 
 __title__      = "pyconsensus"
-__version__    = "0.1.1"
+__version__    = "0.1.2"
 __author__     = "Paul Sztorc and Jack Peterson"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
@@ -64,11 +64,11 @@ getcontext().rounding = ROUND_HALF_EVEN
 
 class Oracle(object):
 
-    def __init__(self, votes=None, decision_bounds=None, rep=-1,
+    def __init__(self, votes=None, decision_bounds=None, weights=-1,
                  catch_p=.1, max_row=5000, verbose=False):
         self.votes = ma.masked_array(votes, isnan(votes))
         self.decision_bounds = decision_bounds
-        self.rep = rep
+        self.rep = weights
         self.catch_p = catch_p
         self.max_row = max_row
         self.verbose = verbose
