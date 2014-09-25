@@ -17,5 +17,5 @@ setup(
     download_url = "https://github.com/tensorjack/pyconsensus/tarball/0.1",
     packages=["pyconsensus"],
     install_requires=["numpy"],
-    keywords = ["consensus", "truthcoin", "svd", "oracle"]
+    keywords = ["consensus", "prediction market", "PM", "truthcoin", "oracle"]
 )
