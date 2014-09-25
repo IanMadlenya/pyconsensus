@@ -14,10 +14,16 @@ Installation
 
 The easiest way to install pyconsensus is using pip::
 
-    pip install pyconsensus
+    $ pip install pyconsensus
+
+To upgrade your pyconsensus installation, use::
+
+    $ pip install --upgrade --no-deps pyconsensus
 
 Usage
 ^^^^^
+
+To use pyconsensus, import the Oracle class::
 
     from pyconsensus import Oracle
 
