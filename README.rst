@@ -7,6 +7,9 @@ pyconsensus
 .. image:: https://coveralls.io/repos/tensorjack/pyconsensus/badge.png
   :target: https://coveralls.io/r/tensorjack/pyconsensus
 
+.. image:: https://badge.fury.io/py/pyconsensus.svg
+    :target: http://badge.fury.io/py/pyconsensus
+
 pyconsensus is a Python implementation of the Truthcoin consensus mechanism, originally invented by Paul Sztorc: https://github.com/psztorc/Truthcoin.
 
 Installation
