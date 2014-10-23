@@ -40,11 +40,11 @@ class TestConsensus(unittest.TestCase):
         outcome = self.oracle.consensus()
         self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)
 
-    def test_consensus_weighted(self):
-        reputation = np.array([[1], [1], [1], [1], [1], [1]])
-        oracle = Oracle(votes=self.votes, reputation=reputation)
-        outcome = oracle.consensus()
-        self.assertIsNotNone(outcome)
+    # def test_consensus_weighted(self):
+    #     reputation = np.array([[1], [1], [1], [1], [1], [1]])
+    #     oracle = Oracle(votes=self.votes, reputation=reputation)
+    #     outcome = oracle.consensus()
+    #     self.assertIsNotNone(outcome)
 
     def test_consensus_nans(self):
         votes = np.array([[1, 1, 0, 0],
