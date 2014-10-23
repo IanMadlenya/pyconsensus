@@ -6,16 +6,16 @@ except ImportError:
 
 setup(
     name="pyconsensus",
-    version="0.1.6",
+    version="0.2",
     description="Consensus mechanism for Truthcoin",
     author="Jack Peterson and Paul Sztorc",
-    author_email="<jack@dyffy.com>",
+    author_email="<jack@tinybike.net>",
     maintainer="Jack Peterson",
-    maintainer_email="<jack@dyffy.com>",
+    maintainer_email="<jack@tinybike.net>",
     license="GPL",
     url="https://github.com/tensorjack/pyconsensus",
-    download_url = "https://github.com/tensorjack/pyconsensus/tarball/0.1.6",
+    download_url = "https://github.com/tensorjack/pyconsensus/tarball/0.2",
     packages=["pyconsensus"],
-    install_requires=["numpy", "six"],
+    install_requires=["numpy", "six", "weightedstats"],
     keywords = ["consensus", "prediction market", "PM", "truthcoin", "oracle"]
 )
