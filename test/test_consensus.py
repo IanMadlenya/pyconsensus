@@ -44,7 +44,9 @@ class TestConsensus(unittest.TestCase):
         reputation = np.array([[1], [1], [1], [1], [1], [1]])
         oracle = Oracle(votes=self.votes, reputation=reputation)
         outcome = oracle.consensus()
-        self.assertIsNotNone(outcome)
+        self.assertTrue(0 <= outcome["Certainty"] <= 1)
+        self.assertTrue(0 <= outcome["Participation"] <= 1)
+        self.assertAlmostEquals(outcome["Certainty"], 0.228237569612, places=11)
 
     def test_consensus_nans(self):
         votes = np.array([[1, 1, 0, 0],
@@ -55,7 +57,9 @@ class TestConsensus(unittest.TestCase):
                           [0, 0, 1, 1]])
         oracle = Oracle(votes=votes)
         outcome = oracle.consensus()
-        self.assertIsNotNone(outcome)
+        self.assertTrue(0 <= outcome["Certainty"] <= 1)
+        self.assertTrue(0 <= outcome["Participation"] <= 1)
+        self.assertAlmostEquals(outcome["Certainty"], 0.28865265952, places=11)
 
     def test_consensus_weighted_nans(self):
         votes = np.array([[1, 1, 0, 0],
@@ -67,68 +71,83 @@ class TestConsensus(unittest.TestCase):
         reputation = np.array([[1], [1], [1], [1], [1], [1]])
         oracle = Oracle(votes=votes, reputation=reputation)
         outcome = oracle.consensus()
-        print(outcome["Agents"]["OldRep"])
-        print(outcome["Agents"]["ThisRep"])
-        self.assertIsNotNone(outcome)
+        # print(outcome["Agents"]["OldRep"])
+        # print(outcome["Agents"]["ThisRep"])
+        self.assertTrue(0 <= outcome["Certainty"] <= 1)
+        self.assertTrue(0 <= outcome["Participation"] <= 1)
+        self.assertAlmostEquals(outcome["Certainty"], 0.28865265952, places=11)
 
     def test_consensus_scaled(self):
+        votes = [[ 0.3, 0.2, 0, 0],
+                 [ 0.5, 0.3, 0, 0],
+                 [ 0.4, 0.1, 0, 0],
+                 [ 0.2, 0.7, 1, 0],
+                 [ 0.1, 0.3, 1, 1],
+                 [0.15, 0.2, 1, 1]]
         scalar_decision_params = [
             {"scaled": True, "min": 0.1, "max": 0.5},
             {"scaled": True, "min": 0.2, "max": 0.7},
             {"scaled": False, "min": 0, "max": 1},
             {"scaled": False, "min": 0, "max": 1},
         ]
-        oracle = Oracle(votes=self.votes, decision_bounds=scalar_decision_params)
+        oracle = Oracle(votes=votes, decision_bounds=scalar_decision_params)
         outcome = oracle.consensus()
-        self.assertAlmostEquals(outcome["Certainty"], 0.58533001129418272, places=11)
+        self.assertTrue(0 <= outcome["Certainty"] <= 1)
+        self.assertTrue(0 <= outcome["Participation"] <= 1)
+        self.assertAlmostEquals(outcome["Certainty"], 0.362414826111, places=11)
 
-    # def test_consensus_scaled_nans(self):
-    #     votes = np.array([[1, 1, 0, 0],
-    #                       [1, 0, 0, 0],
-    #                       [1, 1, np.nan, 0],
-    #                       [1, 1, 1, 0],
-    #                       [0, 0, 1, 1],
-    #                       [0, 0, 1, 1]])
-    #     scalar_decision_params = [
-    #         {"scaled": True, "min": 0.1, "max": 0.5},
-    #         {"scaled": True, "min": 0.2, "max": 0.7},
-    #         {"scaled": False, "min": 0, "max": 1},
-    #         {"scaled": False, "min": 0, "max": 1},
-    #     ]
-    #     oracle = Oracle(votes=votes, decision_bounds=scalar_decision_params)
-    #     outcome = oracle.consensus()
-    #     print(outcome["Agents"]["OldRep"])
-    #     print(outcome["Agents"]["ThisRep"])
-    #     self.assertAlmostEquals(outcome["Certainty"], 0.618113325804, places=11)
+    def test_consensus_scaled_nans(self):
+        votes = np.array([[ 0.3, 0.2, 0, 0],
+                          [ 0.5, 0.3, np.nan, 0],
+                          [ 0.4, 0.1, 0, 0],
+                          [ 0.2, 0.7, 1, 0],
+                          [ 0.1, 0.3, 1, 1],
+                          [0.15, 0.2, 1, 1]])
+        scalar_decision_params = [
+            {"scaled": True, "min": 0.1, "max": 0.5},
+            {"scaled": True, "min": 0.2, "max": 0.7},
+            {"scaled": False, "min": 0, "max": 1},
+            {"scaled": False, "min": 0, "max": 1},
+        ]
+        oracle = Oracle(votes=votes, decision_bounds=scalar_decision_params)
+        outcome = oracle.consensus()
+        self.assertTrue(0 <= outcome["Certainty"] <= 1)
+        self.assertTrue(0 <= outcome["Participation"] <= 1)
+        self.assertAlmostEquals(outcome["Certainty"], 0.362414826111, places=11)
 
-    # def test_consensus_weighted_scaled_nans(self):
-    #     votes = np.array([[1, 1, 0, 0],
-    #                       [1, 0, 0, 0],
-    #                       [1, 1, np.nan, 0],
-    #                       [1, 1, 1, 0],
-    #                       [0, 0, 1, 1],
-    #                       [0, 0, 1, 1]])
-    #     scalar_decision_params = [
-    #         {"scaled": True, "min": 0.1, "max": 0.5},
-    #         {"scaled": True, "min": 0.2, "max": 0.7},
-    #         {"scaled": False, "min": 0, "max": 1},
-    #         {"scaled": False, "min": 0, "max": 1},
-    #     ]
-    #     oracle = Oracle(votes=votes,
-    #                     decision_bounds=scalar_decision_params,
-    #                     reputation=np.array([[1]] * 6))
-    #     outcome = oracle.consensus()
-    #     print(outcome["Agents"]["OldRep"])
-    #     print(outcome["Agents"]["ThisRep"])
+    def test_consensus_weighted_scaled_nans(self):
+        votes = np.array([[ 0.3, 0.2, 0, 0],
+                          [ 0.5, 0.3, np.nan, 0],
+                          [ 0.4, 0.1, 0, 0],
+                          [ 0.2, 0.7, 1, 0],
+                          [ 0.1, 0.3, 1, 1],
+                          [0.15, 0.2, 1, 1]])
+        scalar_decision_params = [
+            {"scaled": True, "min": 0.1, "max": 0.5},
+            {"scaled": True, "min": 0.2, "max": 0.7},
+            {"scaled": False, "min": 0, "max": 1},
+            {"scaled": False, "min": 0, "max": 1},
+        ]
+        oracle = Oracle(votes=votes,
+                        decision_bounds=scalar_decision_params,
+                        reputation=np.array([[1]] * 6))
+        outcome = oracle.consensus()
+        self.assertTrue(0 <= outcome["Certainty"] <= 1)
+        self.assertTrue(0 <= outcome["Participation"] <= 1)
+        self.assertAlmostEquals(outcome["Certainty"], 0.362414826111, places=11)
 
     def test_consensus_array(self):
         oracle = Oracle(votes=np.array(self.votes))
         outcome = oracle.consensus()
+        self.assertTrue(0 <= outcome["Certainty"] <= 1)
+        self.assertTrue(0 <= outcome["Participation"] <= 1)
         self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)
 
     def test_consensus_masked_array(self):
         oracle = Oracle(votes=ma.masked_array(self.votes, np.isnan(self.votes)))
         outcome = oracle.consensus()
+        self.assertTrue(0 <= outcome["Certainty"] <= 1)
+        self.assertTrue(0 <= outcome["Participation"] <= 1)
         self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)        
 
     def test_MeanNa(self):
