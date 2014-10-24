@@ -68,12 +68,12 @@ class Oracle(object):
         self.verbose = verbose
         self.num_votes = len(votes)
         if reputation is None:
+            self.total_rep = self.num_votes
             self.reputation = np.array([[1 / float(self.num_votes)]] * self.num_votes)
-            self.rep_coins = np.copy(self.reputation)
-            self.total_rep = sum(np.array(self.reputation).flatten())
+            self.rep_coins = (np.copy(self.reputation) * 10**6).astype(int)
         else:
             self.total_rep = sum(np.array(reputation).flatten())
-            self.reputation = [i / float(self.total_rep) for i in reputation]
+            self.reputation = np.array([i / float(self.total_rep) for i in reputation])
             self.rep_coins = np.array([map(int, i) for i in np.abs(reputation) * 10**6])
 
     def Rescale(self):
@@ -145,7 +145,7 @@ class Oracle(object):
         # Normalize
         return v / np.sum(v)
 
-    def WeightedCov(self, votes):
+    def WeightedCov(self, votes_filled):
         """Weights are the number of coins people start with, so the aim of this
         weighting is to count 1 vote for each of their coins -- e.g., guy with 10
         coins effectively gets 10 votes, guy with 1 coin gets 1 vote, etc.
@@ -155,44 +155,45 @@ class Oracle(object):
         Taken from
         http://stats.stackexchange.com/questions/61225/correct-equation-for-weighted-unbiased-sample-covariance
         """
-        # Compute the weighted sample mean
-        weighted_sample_mean = ma.average(votes, axis=0, weights=np.hstack(self.rep_coins))
+        # Compute the weighted mean (of all voters) for each decision
+        # e.g. decision_1_mean = (voter_0_decision_1 + voter_1_decision_1 + voter_2_decision_1 + ...) / N
+        weighted_mean = ma.average(votes_filled, axis=0, weights=self.rep_coins.squeeze())
 
         # Differences from the mean
-        deviation = np.matrix(votes - weighted_sample_mean)
+        mean_deviation = np.matrix(votes_filled - weighted_mean)
 
         # Compute the unbiased weighted sample covariance
         #
-        # TODO for uniform weights, variance should be the same as
-        # cov(deviation.T), but is in fact the same as
-        # cov(deviation.T, bias=1) -- why is this?
-        variance = 1/(sum(self.rep_coins)-1) * ma.multiply(deviation, self.rep_coins).T.dot(deviation)
+        # TODO for uniform weights, covariance_matrix should be the same as
+        # cov(mean_deviation.T), but is in fact the same as
+        # cov(mean_deviation.T, bias=1) -- why is this?
+        covariance_matrix = 1/(sum(self.rep_coins)-1) * ma.multiply(mean_deviation, self.rep_coins).T.dot(mean_deviation)
 
-        return {'Cov': variance, 'Center': deviation}
+        return covariance_matrix, mean_deviation
 
-    def WeightedPrinComp(self, votes):
+    def WeightedPrinComp(self, votes_filled):
         """Principal Component Analysis (PCA) on the votes matrix.
 
         The votes matrix has voters as rows and decisions as columns.
 
         """
-        wCVM = self.WeightedCov(votes)
-        SVD = np.linalg.svd(wCVM['Cov'])
+        covariance_matrix, mean_deviation = self.WeightedCov(votes_filled)
+        SVD = np.linalg.svd(covariance_matrix)
 
         # First loading
         L = SVD[0].T[0]
 
         # First score
-        S = np.dot(wCVM['Center'], SVD[0]).T[0]
+        S = np.dot(mean_deviation, SVD[0]).T[0]
 
         return L, S
 
-    def GetRewardWeights(self, votes):
+    def GetRewardWeights(self, votes_filled):
         """Calculates new reputations using a weighted
         Principal Component Analysis (PCA).
 
         """
-        Results = self.WeightedPrinComp(votes)
+        Results = self.WeightedPrinComp(votes_filled)
         # The first loading is designed to indicate which Decisions were more 'agreed-upon' than others.
         FirstLoading = Results[0]
         # The scores show loadings on consensus (to what extent does this observation represent consensus?)
@@ -205,9 +206,9 @@ class Oracle(object):
         #  I originally tried doing this using math but after multiple failures I chose this ad hoc way.
         Set1 = FirstScore + abs(min(FirstScore))
         Set2 = FirstScore - max(FirstScore)
-        Old = np.dot(self.rep_coins.T, votes)
-        New1 = np.dot(self.GetWeight(Set1), votes)
-        New2 = np.dot(self.GetWeight(Set2), votes)
+        Old = np.dot(self.rep_coins.T, votes_filled)
+        New1 = np.dot(self.GetWeight(Set1), votes_filled)
+        New2 = np.dot(self.GetWeight(Set2), votes_filled)
 
         # Difference in sum of squared errors. If > 0, then New1 had higher
         # errors (use New2); conversely if < 0, then use New1.
@@ -221,20 +222,20 @@ class Oracle(object):
         RowRewardWeighted = self.reputation # (set this to uniform if you want a passive diffusion toward equality when people cooperate [not sure why you would]). Instead diffuses towards previous reputation (Smoothing does this anyway).
         if max(abs(AdjPrinComp)) != 0:
             # Overwrite the inital declaration IFF there wasn't perfect consensus.
-            RowRewardWeighted = self.GetWeight(AdjPrinComp * (self.rep_coins / np.mean(self.rep_coins)).T)
+            RowRewardWeighted = self.GetWeight(AdjPrinComp * (self.reputation / np.mean(self.reputation)).T)
 
         #note: reputation/mean(reputation) is a correction ensuring Reputation is additive. Therefore, nothing can be gained by splitting/combining Reputation into single/multiple accounts.
               
         # Freshly-Calculated Reward (Reputation) - Exponential Smoothing
         # New Reward: RowRewardWeighted
         # Old Reward: reputation
-        SmoothedR = self.alpha*RowRewardWeighted + (1-self.alpha)*self.rep_coins.T
+        SmoothedR = self.alpha*RowRewardWeighted + (1-self.alpha)*self.reputation.T
 
         return {
             "FirstL": FirstLoading,
-            "OldRep": self.rep_coins.T,
+            "OldRep": self.reputation.T,
             "ThisRep": RowRewardWeighted,
-            "SmoothRep":SmoothedR,
+            "SmoothRep": SmoothedR,
         }
 
     def GetDecisionOutcomes(self, votes, ScaledIndex):
@@ -301,7 +302,7 @@ class Oracle(object):
 
             # Slightly complicated:
             NAsToFill = np.dot(NAmat, np.diag(DecisionOutcomes_Raw))
-            
+
             # This builds a matrix whose columns j:
             #   NAmat was false (the observation wasn't missing) - have a value of Zero
             #   NAmat was true (the observation was missing)     - have a value of the jth element of DecisionOutcomes.Raw (the 'current best guess')
@@ -335,11 +336,11 @@ class Oracle(object):
             MScaled = self.Rescale()
 
         # Handle Missing Values
-        Filled = self.FillNa(MScaled, ScaledIndex)
+        votes_filled = self.FillNa(MScaled, ScaledIndex)
 
         # Consensus - Row Players
         # New Consensus Reward
-        PlayerInfo = self.GetRewardWeights(Filled)
+        PlayerInfo = self.GetRewardWeights(votes_filled)
         AdjLoadings = PlayerInfo['FirstL']
 
         # Column Players (The Decision Creators)
@@ -347,13 +348,13 @@ class Oracle(object):
         # Consensus - "Who won?" Decision Outcome    
         # Simple matrix multiplication ... highest information density at RowBonus,
         # but need DecisionOutcomes.Raw to get to that
-        DecisionOutcomes_Raw = np.dot(PlayerInfo['SmoothRep'], Filled).squeeze()
+        DecisionOutcomes_Raw = np.dot(PlayerInfo['SmoothRep'], votes_filled).squeeze()
 
         # Discriminate Based on Contract Type
-        for i in range(Filled.shape[1]):
+        for i in range(votes_filled.shape[1]):
             # Our Current best-guess for this Scaled Decision (weighted median)
             if ScaledIndex[i]:
-                DecisionOutcomes_Raw[i] = weighted_median(Filled[:,i],
+                DecisionOutcomes_Raw[i] = weighted_median(votes_filled[:,i],
                                                           PlayerInfo["SmoothRep"].flatten())
 
         # .5 is obviously undesireable, this function travels from 0 to 1
@@ -416,7 +417,7 @@ class Oracle(object):
 
         Output = {
             'Original': self.votes.base,
-            'Filled': Filled.base,
+            'Filled': votes_filled.base,
             'Agents': {
                 'OldRep': PlayerInfo['OldRep'][0],
                 'ThisRep': PlayerInfo['ThisRep'][0],
