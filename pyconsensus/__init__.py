@@ -68,10 +68,12 @@ class Oracle(object):
         self.verbose = verbose
         self.num_votes = len(votes)
         if reputation is None:
+            self.weighted = False
             self.total_rep = self.num_votes
             self.reputation = np.array([[1 / float(self.num_votes)]] * self.num_votes)
             self.rep_coins = (np.copy(self.reputation) * 10**6).astype(int)
         else:
+            self.weighted = True
             self.total_rep = sum(np.array(reputation).flatten())
             self.reputation = np.array([i / float(self.total_rep) for i in reputation])
             self.rep_coins = np.array([map(int, i) for i in np.abs(reputation) * 10**6])
@@ -97,17 +99,10 @@ class Oracle(object):
             OutMatrix[:,i] -= self.decision_bounds[i]["min"]
 
         # Rescale
-        NaIndex = np.isnan(OutMatrix)
-        OutMatrix[NaIndex] = 0
-        OutMatrix = np.dot(OutMatrix, np.diag(InvSpan))
+        OutMatrix[np.isnan(OutMatrix)] = np.mean(OutMatrix)
 
-        return OutMatrix
+        return np.dot(OutMatrix, np.diag(InvSpan))
 
-    def MeanNa(self, v):
-        """Takes masked array, replaces missing values with array mean."""
-        v[np.where(v.mask)] = np.mean(v)
-        return v
-        
     def GetWeight(self, v):
         """Takes an array, and returns proportional distance from zero."""
         v = abs(v)
@@ -135,39 +130,25 @@ class Oracle(object):
             Out.append(Weight[i] / Expected[i])
         return Out
 
-    def ReWeight(self, v):
-        """Get the relative influence of numbers, treat NaN as influence-less."""
-        exclude = np.isnan(v)
-
-        # Set missing values to 0
-        v[exclude] = 0
-
-        # Normalize
-        return v / np.sum(v)
-
     def WeightedCov(self, votes_filled):
         """Weights are the number of coins people start with, so the aim of this
         weighting is to count 1 vote for each of their coins -- e.g., guy with 10
         coins effectively gets 10 votes, guy with 1 coin gets 1 vote, etc.
 
-        Takes 1] a masked array, and 2] an [n x 1] dimentional array of weights,
-        and computes the weighted covariance matrix and center of a given array.
-        Taken from
         http://stats.stackexchange.com/questions/61225/correct-equation-for-weighted-unbiased-sample-covariance
+
         """
         # Compute the weighted mean (of all voters) for each decision
-        # e.g. decision_1_mean = (voter_0_decision_1 + voter_1_decision_1 + voter_2_decision_1 + ...) / N
-        weighted_mean = ma.average(votes_filled, axis=0, weights=self.rep_coins.squeeze())
+        weighted_mean = ma.average(votes_filled,
+                                   axis=0,
+                                   weights=self.rep_coins.squeeze())
 
-        # Differences from the mean
+        # Each vote's difference from the mean of its decision (column)
         mean_deviation = np.matrix(votes_filled - weighted_mean)
 
-        # Compute the unbiased weighted sample covariance
-        #
-        # TODO for uniform weights, covariance_matrix should be the same as
-        # cov(mean_deviation.T), but is in fact the same as
-        # cov(mean_deviation.T, bias=1) -- why is this?
-        covariance_matrix = 1/(sum(self.rep_coins)-1) * ma.multiply(mean_deviation, self.rep_coins).T.dot(mean_deviation)
+        # Compute the unbiased weighted population covariance
+        # (for uniform weights, equal to np.cov(votes_filled.T, bias=1))
+        covariance_matrix = 1/float(np.sum(self.rep_coins)-1) * ma.multiply(mean_deviation, self.rep_coins).T.dot(mean_deviation)
 
         return covariance_matrix, mean_deviation
 
@@ -178,15 +159,10 @@ class Oracle(object):
 
         """
         covariance_matrix, mean_deviation = self.WeightedCov(votes_filled)
-        SVD = np.linalg.svd(covariance_matrix)
-
-        # First loading
-        L = SVD[0].T[0]
-
-        # First score
-        S = np.dot(mean_deviation, SVD[0]).T[0]
-
-        return L, S
+        U = np.linalg.svd(covariance_matrix)[0]
+        first_loading = U.T[0]
+        first_score = np.dot(mean_deviation, U).T[0]
+        return first_loading, first_score
 
     def GetRewardWeights(self, votes_filled):
         """Calculates new reputations using a weighted
@@ -245,36 +221,31 @@ class Oracle(object):
         """
         DecisionOutcomes_Raw = []
         
-        # Iterate over columns
-        # import json
-        # print(json.dumps(self.decision_bounds, indent=3, sort_keys=True))
+        # Iterate over decisions (columns)
         for i in range(votes.shape[1]):
 
             # The Reputation of the rows (players) who DID provide
             # judgements, rescaled to sum to 1.
-            # print(-votes[:,i])
-            # print(-votes[:,i].mask)
-            # print(self.reputation[-votes[:,i].mask])
+            Row = self.reputation[-votes[:,i].mask]
 
-            # exclude = np.isnan(v)            
-            # # Set missing values to 0
-            # v[exclude] = 0
-            # # Normalize
-            # v / np.sum(v)
+            # Set missing values to 0
+            Row[np.isnan(Row)] = 0
 
-            Row = self.ReWeight(self.reputation[-votes[:,i].mask])
+            # Normalize
+            Row /= np.sum(Row)
 
             # The relevant Decision with NAs removed.
             # ("What these row-players had to say about the Decisions
             # they DID judge.")
             Col = votes[-votes[:,i].mask, i]
 
-            # Discriminate Based on Contract Type
+            # Discriminate based on contract type.
+            # Current best-guess for this Binary Decision (weighted average)
             if not ScaledIndex[i]:
-                # Our Current best-guess for this Binary Decision (weighted average)
                 DecisionOutcomes_Raw.append(np.dot(Col, Row))
+
+            # Current best-guess for this Scaled Decision (weighted median)
             else:
-                # Our Current best-guess for this Scaled Decision (weighted median)
                 wmed = weighted_median(Row[:,0], Col)
                 DecisionOutcomes_Raw.append(wmed)
 

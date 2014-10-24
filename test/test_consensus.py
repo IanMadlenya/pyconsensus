@@ -20,7 +20,7 @@ HERE = os.path.dirname(os.path.realpath(__file__))
 sys.path.insert(0, os.path.join(HERE, os.pardir))
 sys.path.insert(0, os.path.join(HERE, os.pardir, "pyconsensus"))
 
-from pyconsensus import Oracle
+from pyconsensus import Oracle, main
 
 class TestConsensus(unittest.TestCase):
 
@@ -37,6 +37,11 @@ class TestConsensus(unittest.TestCase):
         self.c3 = [2, 3, -1, 4, 0]
 
     def test_consensus(self):
+        outcome = self.oracle.consensus()
+        self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)
+
+    def test_consensus_verbose(self):
+        self.oracle = Oracle(votes=self.votes, verbose=True)
         outcome = self.oracle.consensus()
         self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)
 
@@ -113,7 +118,8 @@ class TestConsensus(unittest.TestCase):
         outcome = oracle.consensus()
         self.assertTrue(0 <= outcome["Certainty"] <= 1)
         self.assertTrue(0 <= outcome["Participation"] <= 1)
-        self.assertAlmostEquals(outcome["Certainty"], 0.362414826111, places=11)
+        self.assertAlmostEquals(outcome["Certainty"], 0.384073052730, places=11)
+        # self.assertAlmostEquals(outcome["Certainty"], 0.362414826111, places=11)
 
     def test_consensus_weighted_scaled_nans(self):
         votes = np.array([[ 0.3, 0.2, 0, 0],
@@ -134,7 +140,8 @@ class TestConsensus(unittest.TestCase):
         outcome = oracle.consensus()
         self.assertTrue(0 <= outcome["Certainty"] <= 1)
         self.assertTrue(0 <= outcome["Participation"] <= 1)
-        self.assertAlmostEquals(outcome["Certainty"], 0.362414826111, places=11)
+        self.assertAlmostEquals(outcome["Certainty"], 0.384073052730, places=11)
+        # self.assertAlmostEquals(outcome["Certainty"], 0.362414826111, places=11)
 
     def test_consensus_array(self):
         oracle = Oracle(votes=np.array(self.votes))
@@ -148,12 +155,7 @@ class TestConsensus(unittest.TestCase):
         outcome = oracle.consensus()
         self.assertTrue(0 <= outcome["Certainty"] <= 1)
         self.assertTrue(0 <= outcome["Participation"] <= 1)
-        self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)        
-
-    def test_MeanNa(self):
-        expected = [1.0, 2.0, 3.0, 2.25, 3.0]
-        actual = self.oracle.MeanNa(self.c2)
-        self.assertListEqual(list(actual.base), expected)
+        self.assertAlmostEquals(outcome["Certainty"], 0.228237569613, places=11)
 
     def test_Catch(self):
         expected = [0, 1, 0.5, 0]
@@ -174,17 +176,6 @@ class TestConsensus(unittest.TestCase):
             result.append((actual[i] - expected[i])**2)
         self.assertLess(sum(result), 0.000000000001)
 
-    def test_ReWeight(self):
-        self.oracle.MeanNa(self.c2)
-        self.oracle.Influence(self.oracle.GetWeight(self.c2))
-        expected = [0.08888888888888889,
-                    0.17777777777777778,
-                    0.26666666666666666,
-                    0.2,
-                    0.26666666666666666]
-        actual = self.oracle.ReWeight(self.c2)
-        self.assertListEqual(expected, list(actual.base))
-
     def test_WeightedPrinComp(self):
         expected = np.array([-0.81674714,
                              -0.35969107,
@@ -197,6 +188,11 @@ class TestConsensus(unittest.TestCase):
         for i in range(len(actual)):
             result.append((actual[i] - expected[i])**2)
         self.assertLess(sum(result), 0.000000000001)
+
+    def test_main(self):
+        main()
+        main(argv=('', '-h'))
+        self.assertRaises(main(argv=('', '-q')))
 
     def tearDown(self):
         del self.votes
