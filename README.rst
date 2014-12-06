@@ -1,16 +1,18 @@
 pyconsensus
 ===========
 
-.. image:: https://travis-ci.org/tensorjack/pyconsensus.svg?branch=master
-    :target: https://travis-ci.org/tensorjack/pyconsensus
+.. image:: https://travis-ci.org/AugurProject/pyconsensus.svg?branch=master
+    :target: https://travis-ci.org/AugurProject/pyconsensus
 
-.. image:: https://coveralls.io/repos/tensorjack/pyconsensus/badge.png
-  :target: https://coveralls.io/r/tensorjack/pyconsensus
+.. image:: https://coveralls.io/repos/AugurProject/pyconsensus/badge.png
+  :target: https://coveralls.io/r/AugurProject/pyconsensus
 
 .. image:: https://badge.fury.io/py/pyconsensus.svg
     :target: http://badge.fury.io/py/pyconsensus
 
-pyconsensus is a Python implementation of the Truthcoin consensus mechanism, originally invented by Paul Sztorc: https://github.com/psztorc/Truthcoin.
+pyconsensus is a Python implementation of the Augur/Truthcoin consensus mechanism, originally invented by Paul Sztorc: https://github.com/psztorc/Truthcoin.
+
+Donations: 14sqtQRWuWqa7SCtS1iSjt1FexSxfwnw7G
 
 Installation
 ^^^^^^^^^^^^
