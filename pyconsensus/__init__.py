@@ -39,7 +39,7 @@ from weightedstats import weighted_median
 from six.moves import xrange as range
 
 __title__      = "pyconsensus"
-__version__    = "0.2.1"
+__version__    = "0.2.2"
 __author__     = "Paul Sztorc and Jack Peterson"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
@@ -76,7 +76,7 @@ class Oracle(object):
             self.weighted = True
             self.total_rep = sum(np.array(reputation).flatten())
             self.reputation = np.array([i / float(self.total_rep) for i in reputation])
-            self.rep_coins = np.array([map(int, i) for i in np.abs(reputation) * 10**6])
+            self.rep_coins = (np.abs(np.copy(reputation)) * 10**6).astype(int)
 
     def Rescale(self):
         """Forces a matrix of raw (user-supplied) information
