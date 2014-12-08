@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Consensus mechanism for Truthcoin.
+"""Consensus mechanism for Augur/Truthcoin.
 
-pyconsensus is a Python implementation of the Truthcoin consensus mechanism,
-described in detail at https://github.com/psztorc/Truthcoin.
+pyconsensus is a Python implementation of the Augur/Truthcoin consensus
+mechanism, described in detail at https://github.com/psztorc/Truthcoin.
 
 Usage:
 
@@ -34,12 +34,11 @@ import sys
 import os
 import getopt
 import numpy as np
-import numpy.ma as ma
 from weightedstats import weighted_median
 from six.moves import xrange as range
 
 __title__      = "pyconsensus"
-__version__    = "0.2.2"
+__version__    = "0.2.3"
 __author__     = "Paul Sztorc and Jack Peterson"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
@@ -60,7 +59,7 @@ class Oracle(object):
             }
 
         """
-        self.votes = ma.masked_array(votes, np.isnan(votes))
+        self.votes = np.ma.masked_array(votes, np.isnan(votes))
         self.decision_bounds = decision_bounds
         self.catch_tolerance = catch_tolerance
         self.max_row = max_row
@@ -93,7 +92,7 @@ class Oracle(object):
             InvSpan.append(1 / float(scale["max"] - scale["min"]))
 
         # Recenter
-        OutMatrix = ma.copy(self.votes)
+        OutMatrix = np.ma.copy(self.votes)
         cols = self.votes.shape[1]
         for i in range(cols):
             OutMatrix[:,i] -= self.decision_bounds[i]["min"]
@@ -139,7 +138,7 @@ class Oracle(object):
 
         """
         # Compute the weighted mean (of all voters) for each decision
-        weighted_mean = ma.average(votes_filled,
+        weighted_mean = np.ma.average(votes_filled,
                                    axis=0,
                                    weights=self.rep_coins.squeeze())
 
@@ -148,7 +147,7 @@ class Oracle(object):
 
         # Compute the unbiased weighted population covariance
         # (for uniform weights, equal to np.cov(votes_filled.T, bias=1))
-        covariance_matrix = 1/float(np.sum(self.rep_coins)-1) * ma.multiply(mean_deviation, self.rep_coins).T.dot(mean_deviation)
+        covariance_matrix = 1/float(np.sum(self.rep_coins)-1) * np.ma.multiply(mean_deviation, self.rep_coins).T.dot(mean_deviation)
 
         return covariance_matrix, mean_deviation
 
@@ -258,7 +257,7 @@ class Oracle(object):
         depend on the global percentage of slacking.
         """
         # In case no Missing values, Mnew and votes_na will be the same.
-        votes_na_new = ma.copy(votes_na)
+        votes_na_new = np.ma.copy(votes_na)
 
         # Of course, only do this process if there ARE missing values.
         if votes_na.mask.any():
