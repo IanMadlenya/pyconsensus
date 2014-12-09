@@ -73,11 +73,11 @@ class Oracle(object):
             self.rep_coins = (np.copy(self.reputation) * 10**6).astype(int)
         else:
             self.weighted = True
-            self.total_rep = sum(np.array(reputation).flatten())
+            self.total_rep = sum(np.array(reputation).ravel())
             self.reputation = np.array([i / float(self.total_rep) for i in reputation])
             self.rep_coins = (np.abs(np.copy(reputation)) * 10**6).astype(int)
 
-    def Rescale(self):
+    def rescale(self):
         """Forces a matrix of raw (user-supplied) information
         (for example, # of House Seats, or DJIA) to conform to
         SVD-appropriate range.
@@ -87,29 +87,29 @@ class Oracle(object):
 
         """
         # Calulate multiplicative factors
-        InvSpan = []
+        inv_span = []
         for scale in self.decision_bounds:
-            InvSpan.append(1 / float(scale["max"] - scale["min"]))
+            inv_span.append(1 / float(scale["max"] - scale["min"]))
 
         # Recenter
-        OutMatrix = np.ma.copy(self.votes)
+        out_matrix = np.ma.copy(self.votes)
         cols = self.votes.shape[1]
         for i in range(cols):
-            OutMatrix[:,i] -= self.decision_bounds[i]["min"]
+            out_matrix[:,i] -= self.decision_bounds[i]["min"]
 
         # Rescale
-        OutMatrix[np.isnan(OutMatrix)] = np.mean(OutMatrix)
+        out_matrix[np.isnan(out_matrix)] = np.mean(out_matrix)
 
-        return np.dot(OutMatrix, np.diag(InvSpan))
+        return np.dot(out_matrix, np.diag(inv_span))
 
-    def GetWeight(self, v):
+    def get_weight(self, v):
         """Takes an array, and returns proportional distance from zero."""
         v = abs(v)
         if np.sum(v) == 0:
             v += 1
         return v / np.sum(v)
 
-    def Catch(self, X):
+    def catch(self, X):
         """Forces continuous values into bins at 0, .5, and 1"""
         if X < 0.5 * (1 - self.catch_tolerance):
             return 0
@@ -118,23 +118,10 @@ class Oracle(object):
         else:
             return .5
 
-    def Influence(self, Weight):
-        """Takes a normalized Vector (one that sums to 1), and computes
-        relative strength of the indicators.
-        """
-        N = len(Weight)
-        Expected = [[1/N]] * N
-        Out = []
-        for i in range(1, N):
-            Out.append(Weight[i] / Expected[i])
-        return Out
-
-    def WeightedCov(self, votes_filled):
+    def weighted_cov(self, votes_filled):
         """Weights are the number of coins people start with, so the aim of this
         weighting is to count 1 vote for each of their coins -- e.g., guy with 10
         coins effectively gets 10 votes, guy with 1 coin gets 1 vote, etc.
-
-        http://stats.stackexchange.com/questions/61225/correct-equation-for-weighted-unbiased-sample-covariance
 
         """
         # Compute the weighted mean (of all voters) for each decision
@@ -151,106 +138,112 @@ class Oracle(object):
 
         return covariance_matrix, mean_deviation
 
-    def WeightedPrinComp(self, votes_filled):
+    def weighted_prin_comp(self, votes_filled):
         """Principal Component Analysis (PCA) on the votes matrix.
 
         The votes matrix has voters as rows and decisions as columns.
 
         """
-        covariance_matrix, mean_deviation = self.WeightedCov(votes_filled)
+        covariance_matrix, mean_deviation = self.weighted_cov(votes_filled)
         U = np.linalg.svd(covariance_matrix)[0]
         first_loading = U.T[0]
         first_score = np.dot(mean_deviation, U).T[0]
         return first_loading, first_score
 
-    def GetRewardWeights(self, votes_filled):
+    def get_reward_weights(self, votes_filled):
         """Calculates new reputations using a weighted
         Principal Component Analysis (PCA).
 
         """
-        Results = self.WeightedPrinComp(votes_filled)
-        # The first loading is designed to indicate which Decisions were more 'agreed-upon' than others.
-        FirstLoading = Results[0]
-        # The scores show loadings on consensus (to what extent does this observation represent consensus?)
-        FirstScore = Results[1]
+        results = self.weighted_prin_comp(votes_filled)
+        
+        # The first loading (largest eigenvector) is designed to indicate
+        # which Decisions were more 'agreed-upon' than others.
+        first_loading = results[0]
+        
+        # The scores show loadings on consensus (to what extent does
+        # this observation represent consensus?)
+        first_score = results[1]
 
-        #PCA, being an abstract factorization, is incapable of determining anything absolute.
-        #Therefore the results of the entire procedure would theoretically be reversed if the average state of Decisions changed from TRUE to FALSE.
-        #Because the average state of Decisions is a function both of randomness and the way the Decisions are worded, I quickly check to see which
-        #  of the two possible 'new' reputation vectors had more opinion in common with the original 'old' reputation.
-        #  I originally tried doing this using math but after multiple failures I chose this ad hoc way.
-        Set1 = FirstScore + abs(min(FirstScore))
-        Set2 = FirstScore - max(FirstScore)
-        Old = np.dot(self.rep_coins.T, votes_filled)
-        New1 = np.dot(self.GetWeight(Set1), votes_filled)
-        New2 = np.dot(self.GetWeight(Set2), votes_filled)
+        # Because the average state of Decisions is a function both of randomness
+        # and the way the Decisions are worded, I quickly check to see which
+        # of the two possible 'new' reputation vectors had more opinion in common
+        # with the original 'old' reputation. I originally tried doing this using
+        # math but after multiple failures I chose this ad hoc way.
+        set1 = first_score + abs(min(first_score))
+        set2 = first_score - max(first_score)
+        old = np.dot(self.rep_coins.T, votes_filled)
+        new1 = np.dot(self.get_weight(set1), votes_filled)
+        new2 = np.dot(self.get_weight(set2), votes_filled)
 
-        # Difference in sum of squared errors. If > 0, then New1 had higher
-        # errors (use New2); conversely if < 0, then use New1.
-        RefInd = np.sum((New1 - Old)**2) - np.sum((New2 - Old)**2)
-        if RefInd <= 0:
-            AdjPrinComp = Set1
-        if RefInd > 0:
-            AdjPrinComp = Set2
+        # Difference in sum of squared errors. If > 0, then new1 had higher
+        # errors (use new2); conversely if < 0, then use new1.
+        ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+        if ref_ind <= 0:
+            adj_prin_comp = set1
+        if ref_ind > 0:
+            adj_prin_comp = set2
       
-        #Declared here, filled below (unless there was a perfect consensus).
-        RowRewardWeighted = self.reputation # (set this to uniform if you want a passive diffusion toward equality when people cooperate [not sure why you would]). Instead diffuses towards previous reputation (Smoothing does this anyway).
-        if max(abs(AdjPrinComp)) != 0:
+        # (set this to uniform if you want a passive diffusion toward equality
+        # when people cooperate [not sure why you would]). Instead diffuses towards
+        # previous reputation (Smoothing does this anyway).
+        row_reward_weighted = self.reputation
+        if max(abs(adj_prin_comp)) != 0:
             # Overwrite the inital declaration IFF there wasn't perfect consensus.
-            RowRewardWeighted = self.GetWeight(AdjPrinComp * (self.reputation / np.mean(self.reputation)).T)
+            row_reward_weighted = self.get_weight(adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
 
         #note: reputation/mean(reputation) is a correction ensuring Reputation is additive. Therefore, nothing can be gained by splitting/combining Reputation into single/multiple accounts.
               
         # Freshly-Calculated Reward (Reputation) - Exponential Smoothing
-        # New Reward: RowRewardWeighted
+        # New Reward: row_reward_weighted
         # Old Reward: reputation
-        SmoothedR = self.alpha*RowRewardWeighted + (1-self.alpha)*self.reputation.T
+        smooth_rep = self.alpha*row_reward_weighted + (1-self.alpha)*self.reputation.T
 
         return {
-            "FirstL": FirstLoading,
-            "OldRep": self.reputation.T,
-            "ThisRep": RowRewardWeighted,
-            "SmoothRep": SmoothedR,
+            "first_loading": first_loading,
+            "old_rep": self.reputation.T,
+            "this_rep": row_reward_weighted,
+            "smooth_rep": smooth_rep,
         }
 
-    def GetDecisionOutcomes(self, votes, ScaledIndex):
+    def get_decision_outcomes(self, votes, scaled_index):
         """Determines the Outcomes of Decisions based on the provided
         reputation (weighted vote).
 
         """
-        DecisionOutcomes_Raw = []
+        decision_outcomes_raw = []
         
         # Iterate over decisions (columns)
         for i in range(votes.shape[1]):
 
             # The Reputation of the rows (players) who DID provide
             # judgements, rescaled to sum to 1.
-            Row = self.reputation[-votes[:,i].mask]
+            active_players_rep = self.reputation[-votes[:,i].mask]
 
             # Set missing values to 0
-            Row[np.isnan(Row)] = 0
+            active_players_rep[np.isnan(active_players_rep)] = 0
 
             # Normalize
-            Row /= np.sum(Row)
+            active_players_rep /= np.sum(active_players_rep)
 
             # The relevant Decision with NAs removed.
             # ("What these row-players had to say about the Decisions
             # they DID judge.")
-            Col = votes[-votes[:,i].mask, i]
+            active_decisions = votes[-votes[:,i].mask, i]
 
             # Discriminate based on contract type.
             # Current best-guess for this Binary Decision (weighted average)
-            if not ScaledIndex[i]:
-                DecisionOutcomes_Raw.append(np.dot(Col, Row))
+            if not scaled_index[i]:
+                decision_outcomes_raw.append(np.dot(active_decisions, active_players_rep))
 
             # Current best-guess for this Scaled Decision (weighted median)
             else:
-                wmed = weighted_median(Row[:,0], Col)
-                DecisionOutcomes_Raw.append(wmed)
+                wmed = weighted_median(active_players_rep[:,0], active_decisions)
+                decision_outcomes_raw.append(wmed)
 
-        return np.array(DecisionOutcomes_Raw).T
+        return np.array(decision_outcomes_raw).T
 
-    def FillNa(self, votes_na, ScaledIndex):
+    def fill_na(self, votes_na, scaled_index):
         """Uses exisiting data and reputations to fill missing observations.
         Essentially a weighted average using all availiable non-NA data.
         How much should slackers who arent voting suffer? I decided this would
@@ -264,18 +257,18 @@ class Oracle(object):
 
             # Our best guess for the Decision state (FALSE=0, Ambiguous=.5, TRUE=1)
             # so far (ie, using the present, non-missing, values).
-            DecisionOutcomes_Raw = self.GetDecisionOutcomes(votes_na, ScaledIndex).squeeze()
+            decision_outcomes_raw = self.get_decision_outcomes(votes_na, scaled_index).squeeze()
 
             # Fill in the predictions to the original M
-            NAmat = votes_na.mask  # Defines the slice of the matrix which needs to be edited.
-            votes_na_new[NAmat] = 0  # Erase the NA's
+            na_mat = votes_na.mask  # Defines the slice of the matrix which needs to be edited.
+            votes_na_new[na_mat] = 0  # Erase the NA's
 
             # Slightly complicated:
-            NAsToFill = np.dot(NAmat, np.diag(DecisionOutcomes_Raw))
+            NAsToFill = np.dot(na_mat, np.diag(decision_outcomes_raw))
 
             # This builds a matrix whose columns j:
-            #   NAmat was false (the observation wasn't missing) - have a value of Zero
-            #   NAmat was true (the observation was missing)     - have a value of the jth element of DecisionOutcomes.Raw (the 'current best guess')
+            #   na_mat was false (the observation wasn't missing) - have a value of Zero
+            #   na_mat was true (the observation was missing)     - have a value of the jth element of DecisionOutcomes.Raw (the 'current best guess')
             votes_na_new += NAsToFill
             # This replaces the NAs, which were zeros, with the predicted Decision outcome.
 
@@ -284,8 +277,8 @@ class Oracle(object):
             rows, cols = votes_na_new.shape
             for i in range(rows):
                 for j in range(cols):
-                    if not ScaledIndex[j]:
-                        votes_na_new[i][j] = self.Catch(votes_na_new[i][j])
+                    if not scaled_index[j]:
+                        votes_na_new[i][j] = self.catch(votes_na_new[i][j])
 
         return votes_na_new
 
@@ -297,120 +290,117 @@ class Oracle(object):
 
         """
         # Fill the default scales (binary) if none are provided.
-        # In practice, this would also never be used.
         if self.decision_bounds is None:
-            ScaledIndex = [False] * self.votes.shape[1]
-            MScaled = self.votes
+            scaled_index = [False] * self.votes.shape[1]
+            scaled_votes = self.votes
         else:
-            ScaledIndex = [scale["scaled"] for scale in self.decision_bounds]
-            MScaled = self.Rescale()
+            scaled_index = [scale["scaled"] for scale in self.decision_bounds]
+            scaled_votes = self.rescale()
 
-        # Handle Missing Values
-        votes_filled = self.FillNa(MScaled, ScaledIndex)
+        # Handle missing values
+        votes_filled = self.fill_na(scaled_votes, scaled_index)
 
         # Consensus - Row Players
         # New Consensus Reward
-        PlayerInfo = self.GetRewardWeights(votes_filled)
-        AdjLoadings = PlayerInfo['FirstL']
+        player_info = self.get_reward_weights(votes_filled)
+        adj_first_loadings = player_info['first_loading']
 
         # Column Players (The Decision Creators)
         # Calculation of Reward for Decision Authors
         # Consensus - "Who won?" Decision Outcome    
-        # Simple matrix multiplication ... highest information density at RowBonus,
+        # Simple matrix multiplication ... highest information density at row_bonus,
         # but need DecisionOutcomes.Raw to get to that
-        DecisionOutcomes_Raw = np.dot(PlayerInfo['SmoothRep'], votes_filled).squeeze()
+        decision_outcomes_raw = np.dot(player_info['smooth_rep'], votes_filled).squeeze()
 
         # Discriminate Based on Contract Type
         for i in range(votes_filled.shape[1]):
             # Our Current best-guess for this Scaled Decision (weighted median)
-            if ScaledIndex[i]:
-                DecisionOutcomes_Raw[i] = weighted_median(votes_filled[:,i],
-                                                          PlayerInfo["SmoothRep"].flatten())
+            if scaled_index[i]:
+                decision_outcomes_raw[i] = weighted_median(votes_filled[:,i],
+                                                           player_info["smooth_rep"].ravel())
 
         # .5 is obviously undesireable, this function travels from 0 to 1
         # with a minimum at .5
-        Certainty = abs(2 * (DecisionOutcomes_Raw - 0.5))
+        certainty = abs(2 * (decision_outcomes_raw - 0.5))
 
         # Grading Authors on a curve.
-        ConReward = self.GetWeight(Certainty)
+        consensus_reward = self.get_weight(certainty)
 
         # How well did beliefs converge?
-        Avg_Certainty = np.mean(Certainty)
+        avg_certainty = np.mean(certainty)
 
-        # The Outcome Itself
-        # Discriminate Based on Contract Type
-        DecisionOutcome_Adj = []
-        for i, raw in enumerate(DecisionOutcomes_Raw):
-            DecisionOutcome_Adj.append(self.Catch(raw))
-            if ScaledIndex[i]:
-                DecisionOutcome_Adj[i] = raw
+        # The Outcome (Discriminate Based on Contract Type)
+        decision_outcome_adj = []
+        for i, raw in enumerate(decision_outcomes_raw):
+            decision_outcome_adj.append(self.catch(raw))
+            if scaled_index[i]:
+                decision_outcome_adj[i] = raw
 
-        DecisionOutcome_Final = []
-        for i, raw in enumerate(DecisionOutcomes_Raw):
-            DecisionOutcome_Final.append(DecisionOutcome_Adj[i])
-            if ScaledIndex[i]:
-                DecisionOutcome_Final[i] *= (self.decision_bounds[i]["max"] - self.decision_bounds[i]["min"])
+        decision_outcome_final = []
+        for i, raw in enumerate(decision_outcomes_raw):
+            decision_outcome_final.append(decision_outcome_adj[i])
+            if scaled_index[i]:
+                decision_outcome_final[i] *= (self.decision_bounds[i]["max"] - self.decision_bounds[i]["min"])
 
         # Participation
         # Information about missing values
-        NAmat = self.votes * 0
-        NAmat[NAmat.mask] = 1  # indicator matrix for missing
+        na_mat = self.votes * 0
+        na_mat[na_mat.mask] = 1  # indicator matrix for missing
 
         # Participation Within Decisions (Columns)
         # % of reputation that answered each Decision
-        ParticipationC = 1 - np.dot(PlayerInfo['SmoothRep'], NAmat)
+        participation_columns = 1 - np.dot(player_info['smooth_rep'], na_mat)
 
         # Participation Within Agents (Rows)
         # Many options
         # 1- Democracy Option - all Decisions treated equally.
-        ParticipationR = 1 - NAmat.sum(axis=1) / NAmat.shape[1]
+        participation_rows = 1 - na_mat.sum(axis=1) / na_mat.shape[1]
 
         # General Participation
-        PercentNA = 1 - np.mean(ParticipationC)
+        percent_na = 1 - np.mean(participation_columns)
 
         # Possibly integrate two functions of participation? Chicken and egg problem...
         if self.verbose:
             print('*Participation Information*')
             print('Voter Turnout by question')
-            print(ParticipationC)
+            print(participation_columns)
             print('Voter Turnout across questions')
-            print(ParticipationR)
+            print(participation_rows)
 
         # Combine Information
         # Row
-        NAbonusR = self.GetWeight(ParticipationR)
-        RowBonus = NAbonusR * PercentNA + PlayerInfo['SmoothRep'] * (1 - PercentNA)
+        na_bonus_rows = self.get_weight(participation_rows)
+        row_bonus = na_bonus_rows * percent_na + player_info['smooth_rep'] * (1 - percent_na)
 
         # Column
-        NAbonusC = self.GetWeight(ParticipationC)
-        ColBonus = NAbonusC * PercentNA + ConReward * (1 - PercentNA)
+        na_bonus_columns = self.get_weight(participation_columns)
+        col_bonus = na_bonus_columns * percent_na + consensus_reward * (1 - percent_na)
 
-        Output = {
-            'Original': self.votes.base,
-            'Filled': votes_filled.base,
-            'Agents': {
-                'OldRep': PlayerInfo['OldRep'][0],
-                'ThisRep': PlayerInfo['ThisRep'][0],
-                'SmoothRep': PlayerInfo['SmoothRep'][0],
-                'NArow': NAmat.sum(axis=1).base,
-                'ParticipationR': ParticipationR.base,
-                'RelativePart': NAbonusR.base,
-                'RowBonus': RowBonus.base,
+        return {
+            'original': self.votes.base,
+            'filled': votes_filled.base,
+            'agents': {
+                'old_rep': player_info['old_rep'][0],
+                'this_rep': player_info['this_rep'][0],
+                'smooth_rep': player_info['smooth_rep'][0],
+                'na_row': na_mat.sum(axis=1).base,
+                'participation_rows': participation_rows.base,
+                'relative_part': na_bonus_rows.base,
+                'row_bonus': row_bonus.base,
                 },
-            'Decisions': {
-                'First Loading': AdjLoadings,
-                'DecisionOutcomes_Raw': DecisionOutcomes_Raw,
-                'Consensus Reward': ConReward,
-                'Certainty': Certainty,
-                'NAs Filled': NAmat.sum(axis=0),
-                'ParticipationC': ParticipationC,
-                'Author Bonus': ColBonus,
-                'DecisionOutcome_Final': DecisionOutcome_Final,
+            'decisions': {
+                'adj_first_loadings': adj_first_loadings,
+                'decision_outcomes_raw': decision_outcomes_raw,
+                'consensus_reward': consensus_reward,
+                'certainty': certainty,
+                'NAs Filled': na_mat.sum(axis=0),
+                'participation_columns': participation_columns,
+                'Author Bonus': col_bonus,
+                'decision_outcome_final': decision_outcome_final,
                 },
-            'Participation': 1 - PercentNA,
-            'Certainty': Avg_Certainty,
+            'participation': 1 - percent_na,
+            'certainty': avg_certainty,
         }
-        return Output
 
 
 def main(argv=None):
