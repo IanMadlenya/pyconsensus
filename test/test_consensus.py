@@ -89,13 +89,13 @@ class TestConsensus(unittest.TestCase):
                  [ 0.2, 0.7, 1, 0],
                  [ 0.1, 0.3, 1, 1],
                  [0.15, 0.2, 1, 1]]
-        scalar_decision_params = [
+        scalar_event_params = [
             {"scaled": True, "min": 0.1, "max": 0.5},
             {"scaled": True, "min": 0.2, "max": 0.7},
             {"scaled": False, "min": 0, "max": 1},
             {"scaled": False, "min": 0, "max": 1},
         ]
-        oracle = Oracle(votes=votes, decision_bounds=scalar_decision_params)
+        oracle = Oracle(votes=votes, event_bounds=scalar_event_params)
         outcome = oracle.consensus()
         self.assertTrue(0 <= outcome["certainty"] <= 1)
         self.assertTrue(0 <= outcome["participation"] <= 1)
@@ -108,13 +108,13 @@ class TestConsensus(unittest.TestCase):
                           [ 0.2, 0.7, 1, 0],
                           [ 0.1, 0.3, 1, 1],
                           [0.15, 0.2, 1, 1]])
-        scalar_decision_params = [
+        scalar_event_params = [
             {"scaled": True, "min": 0.1, "max": 0.5},
             {"scaled": True, "min": 0.2, "max": 0.7},
             {"scaled": False, "min": 0, "max": 1},
             {"scaled": False, "min": 0, "max": 1},
         ]
-        oracle = Oracle(votes=votes, decision_bounds=scalar_decision_params)
+        oracle = Oracle(votes=votes, event_bounds=scalar_event_params)
         outcome = oracle.consensus()
         self.assertTrue(0 <= outcome["certainty"] <= 1)
         self.assertTrue(0 <= outcome["participation"] <= 1)
@@ -128,14 +128,14 @@ class TestConsensus(unittest.TestCase):
                           [ 0.2, 0.7, 1, 0],
                           [ 0.1, 0.3, 1, 1],
                           [0.15, 0.2, 1, 1]])
-        scalar_decision_params = [
+        scalar_event_params = [
             {"scaled": True, "min": 0.1, "max": 0.5},
             {"scaled": True, "min": 0.2, "max": 0.7},
             {"scaled": False, "min": 0, "max": 1},
             {"scaled": False, "min": 0, "max": 1},
         ]
         oracle = Oracle(votes=votes,
-                        decision_bounds=scalar_decision_params,
+                        event_bounds=scalar_event_params,
                         reputation=np.array([[1]] * 6))
         outcome = oracle.consensus()
         self.assertTrue(0 <= outcome["certainty"] <= 1)
