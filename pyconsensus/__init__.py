@@ -241,6 +241,8 @@ class Oracle(object):
                 wmed = weighted_median(active_players_rep[:,0], active_events)
                 event_outcomes_raw.append(wmed)
 
+        import pdb; pdb.set_trace()
+
         return np.array(event_outcomes_raw).T
 
     def fill_na(self, votes_na, scaled_index):
@@ -407,8 +409,8 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv
     try:
-        short_opts = 'h'
-        long_opts = ['help']
+        short_opts = 'hxm'
+        long_opts = ['help', 'example', 'missing']
         opts, vals = getopt.getopt(argv[1:], short_opts, long_opts)
     except getopt.GetoptError as e:
         sys.stderr.write(e.msg)
@@ -418,6 +420,25 @@ def main(argv=None):
         if opt in ('-h', '--help'):
             print(__doc__)
             return 0
+        elif opt in ('-x', '--example'):
+            votes = [[1, 1, 0, 0],
+                     [1, 0, 0, 0],
+                     [1, 1, 0, 0],
+                     [1, 1, 1, 0],
+                     [0, 0, 1, 1],
+                     [0, 0, 1, 1]]
+            oracle = Oracle(votes=votes)
+            oracle.consensus()
+        elif opt in ('-m', '--missing'):
+            votes = [[1, 1, 0, np.nan],
+                     [1, 0, 0, 0],
+                     [1, 1, 0, 0],
+                     [1, 1, 1, 0],
+                     [np.nan, 0, 1, 1],
+                     [0, 0, 1, 1]]
+            reputation = [2, 10, 4, 2, 7, 1]
+            oracle = Oracle(votes=votes, reputation=reputation)
+            oracle.consensus()
 
 if __name__ == '__main__':
-    sys.exit(main())
+    sys.exit(main(sys.argv))
