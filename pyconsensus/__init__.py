@@ -51,7 +51,7 @@ class Oracle(object):
         """
         Args:
           votes (list-of-lists): votes matrix; rows = voters, columns = Events.
-          Scales (list): list of dicts for each Event
+          event_bounds (list): list of dicts for each Event
             {
               scaled (bool): True if scalar, False if binary (boolean)
               min (float): minimum allowed value (0 if binary)
@@ -126,8 +126,8 @@ class Oracle(object):
         """
         # Compute the weighted mean (of all voters) for each event
         weighted_mean = np.ma.average(votes_filled,
-                                   axis=0,
-                                   weights=self.rep_coins.squeeze())
+                                      axis=0,
+                                      weights=self.rep_coins.squeeze())
 
         # Each vote's difference from the mean of its event (column)
         mean_deviation = np.matrix(votes_filled - weighted_mean)
@@ -165,11 +165,8 @@ class Oracle(object):
         # this observation represent consensus?)
         first_score = results[1]
 
-        # Because the average state of Events is a function both of randomness
-        # and the way the Events are worded, I quickly check to see which
-        # of the two possible 'new' reputation vectors had more opinion in common
-        # with the original 'old' reputation. I originally tried doing this using
-        # math but after multiple failures I chose this ad hoc way.
+        # Which of the two possible 'new' reputation vectors had more opinion in common
+        # with the original 'old' reputation.
         set1 = first_score + abs(min(first_score))
         set2 = first_score - max(first_score)
         old = np.dot(self.rep_coins.T, votes_filled)
@@ -223,12 +220,15 @@ class Oracle(object):
             # Set missing values to 0
             active_players_rep[np.isnan(active_players_rep)] = 0
 
+            total_active_rep = np.sum(active_players_rep)
+
             # Normalize
             active_players_rep /= np.sum(active_players_rep)
 
             # The relevant Event with NAs removed.
             # ("What these row-players had to say about the Events
             # they DID judge.")
+            # Note -- these shortened vectors don't work for PCA
             active_events = votes[-votes[:,i].mask, i]
 
             # Discriminate based on contract type.
@@ -241,29 +241,24 @@ class Oracle(object):
                 wmed = weighted_median(active_players_rep[:,0], active_events)
                 event_outcomes_raw.append(wmed)
 
-        import pdb; pdb.set_trace()
-
         return np.array(event_outcomes_raw).T
 
-    def fill_na(self, votes_na, scaled_index):
-        """Uses exisiting data and reputations to fill missing observations.
+    def fill_na(self, votes, scaled_index):
+        """Uses existing data and reputations to fill missing observations.
         Essentially a weighted average using all availiable non-NA data.
-        How much should slackers who arent voting suffer? I decided this would
-        depend on the global percentage of slacking.
         """
-        # In case no Missing values, Mnew and votes_na will be the same.
-        votes_na_new = np.ma.copy(votes_na)
+        votes_new = np.ma.copy(votes)
 
         # Of course, only do this process if there ARE missing values.
-        if votes_na.mask.any():
+        if votes.mask.any():
 
             # Our best guess for the Event state (FALSE=0, Ambiguous=.5, TRUE=1)
             # so far (ie, using the present, non-missing, values).
-            event_outcomes_raw = self.get_event_outcomes(votes_na, scaled_index).squeeze()
+            event_outcomes_raw = self.get_event_outcomes(votes, scaled_index).squeeze()
 
             # Fill in the predictions to the original M
-            na_mat = votes_na.mask  # Defines the slice of the matrix which needs to be edited.
-            votes_na_new[na_mat] = 0  # Erase the NA's
+            na_mat = votes.mask  # Defines the slice of the matrix which needs to be edited.
+            votes_new[na_mat] = 0  # Erase the NA's
 
             # Slightly complicated:
             NAsToFill = np.dot(na_mat, np.diag(event_outcomes_raw))
@@ -271,18 +266,18 @@ class Oracle(object):
             # This builds a matrix whose columns j:
             #   na_mat was false (the observation wasn't missing) - have a value of Zero
             #   na_mat was true (the observation was missing)     - have a value of the jth element of EventOutcomes.Raw (the 'current best guess')
-            votes_na_new += NAsToFill
+            votes_new += NAsToFill
             # This replaces the NAs, which were zeros, with the predicted Event outcome.
 
             # Appropriately force the predictions into their discrete
             # (0,.5,1) slot. (continuous variables can be gamed).
-            rows, cols = votes_na_new.shape
+            rows, cols = votes_new.shape
             for i in range(rows):
                 for j in range(cols):
                     if not scaled_index[j]:
-                        votes_na_new[i][j] = self.catch(votes_na_new[i][j])
+                        votes_new[i][j] = self.catch(votes_new[i][j])
 
-        return votes_na_new
+        return votes_new
 
     def consensus(self):
         """PCA-based consensus algorithm.
@@ -406,6 +401,7 @@ class Oracle(object):
 
 
 def main(argv=None):
+    np.set_printoptions(linewidth=500)
     if argv is None:
         argv = sys.argv
     try:
