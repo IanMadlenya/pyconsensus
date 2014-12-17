@@ -215,11 +215,7 @@ class Oracle(object):
 
             # The Reputation of the rows (players) who DID provide
             # judgements, rescaled to sum to 1.
-            active_players_rep = self.reputation[-votes[:,i].mask]
-
-            # Set missing values to 0
-            active_players_rep[np.isnan(active_players_rep)] = 0
-
+            active_players_rep = self.reputation * -votes[:,i].mask
             total_active_rep = np.sum(active_players_rep)
 
             # Normalize
@@ -228,8 +224,8 @@ class Oracle(object):
             # The relevant Event with NAs removed.
             # ("What these row-players had to say about the Events
             # they DID judge.")
-            # Note -- these shortened vectors don't work for PCA
-            active_events = votes[-votes[:,i].mask, i]
+            # active_events = votes[-votes[:,i].mask, i]
+            active_events = votes[:,i] * -votes[:,i].mask
 
             # Discriminate based on contract type.
             # Current best-guess for this Binary Event (weighted average)
@@ -238,7 +234,7 @@ class Oracle(object):
 
             # Current best-guess for this Scaled Event (weighted median)
             else:
-                wmed = weighted_median(active_players_rep[:,0], active_events)
+                wmed = weighted_median(active_events, active_players_rep)
                 event_outcomes_raw.append(wmed)
 
         return np.array(event_outcomes_raw).T
@@ -262,10 +258,10 @@ class Oracle(object):
 
             # Slightly complicated:
             NAsToFill = np.dot(na_mat, np.diag(event_outcomes_raw))
-
             # This builds a matrix whose columns j:
             #   na_mat was false (the observation wasn't missing) - have a value of Zero
             #   na_mat was true (the observation was missing)     - have a value of the jth element of EventOutcomes.Raw (the 'current best guess')
+
             votes_new += NAsToFill
             # This replaces the NAs, which were zeros, with the predicted Event outcome.
 
