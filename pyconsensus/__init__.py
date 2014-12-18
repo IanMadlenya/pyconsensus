@@ -36,6 +36,7 @@ import getopt
 import json
 from pprint import pprint
 import numpy as np
+import pandas as pd
 from weightedstats import weighted_median
 from six.moves import xrange as range
 
@@ -46,10 +47,14 @@ __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
 __email__      = "jack@tinybike.net"
 
-# np.set_printoptions(linewidth=500,
-#                     precision=3,
-#                     suppress=True,
-#                     formatter={"float": "{: 0.3f}".format})
+pd.set_option("display.max_rows", 25)
+pd.set_option("display.width", 1000)
+pd.options.display.mpl_style = "default"
+
+np.set_printoptions(linewidth=500,
+                    precision=5,
+                    suppress=True,
+                    formatter={"float": "{: 0.3f}".format})
 
 class Oracle(object):
 
@@ -76,13 +81,22 @@ class Oracle(object):
         if reputation is None:
             self.weighted = False
             self.total_rep = self.num_votes
-            self.reputation = np.array([[1 / float(self.num_votes)]] * self.num_votes)
+            self.reputation = np.array([1 / float(self.num_votes)] * self.num_votes)
+            print "rep:", self.reputation
             self.rep_coins = (np.copy(self.reputation) * 10**6).astype(int)
+            print "repcoins:", self.rep_coins
+            self.total_rep_coins = sum(self.rep_coins)
         else:
             self.weighted = True
             self.total_rep = sum(np.array(reputation).ravel())
+            print "input rep:", reputation
             self.reputation = np.array([i / float(self.total_rep) for i in reputation])
+            # self.reputation = reputation
+            print "rep:      ", self.reputation
             self.rep_coins = (np.abs(np.copy(reputation)) * 10**6).astype(int)
+            # self.rep_coins = reputation
+            print "repcoins: ", self.rep_coins
+            self.total_rep_coins = sum(self.rep_coins)
 
     def rescale(self):
         """Forces a matrix of raw (user-supplied) information
@@ -134,14 +148,30 @@ class Oracle(object):
         # Compute the weighted mean (of all voters) for each event
         weighted_mean = np.ma.average(votes_filled,
                                       axis=0,
-                                      weights=self.rep_coins.squeeze())
+                                      weights=self.reputation)
+
+        print '=== INPUTS ==='
+        print(votes_filled.data)
+        print(self.reputation)
+
+        print '=== WEIGHTED MEANS ==='
+        print(weighted_mean)
 
         # Each vote's difference from the mean of its event (column)
         mean_deviation = np.matrix(votes_filled - weighted_mean)
 
+        print '=== WEIGHTED CENTERED DATA ==='
+        print(mean_deviation)
+
         # Compute the unbiased weighted population covariance
         # (for uniform weights, equal to np.cov(votes_filled.T, bias=1))
-        covariance_matrix = 1/float(np.sum(self.rep_coins)-1) * np.ma.multiply(mean_deviation, np.asmatrix(self.rep_coins).T).T.dot(mean_deviation)
+        # covariance_matrix = 1/float(np.sum(self.rep_coins)-1) * np.ma.multiply(mean_deviation.T, self.rep_coins).dot(mean_deviation)
+        # ssq = np.sum(self.total_rep_coins**2)
+        ssq = np.sum(self.reputation**2)
+        covariance_matrix = 1/float(1 - ssq) * np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation)
+
+        print '=== WEIGHTED COVARIANCES ==='
+        print(covariance_matrix)
 
         return covariance_matrix, mean_deviation
 
@@ -155,6 +185,21 @@ class Oracle(object):
         U = np.linalg.svd(covariance_matrix)[0]
         first_loading = U.T[0]
         first_score = np.dot(mean_deviation, U).T[0]
+
+        print '=== FROM SINGULAR VALUE DECOMPOSITION OF WEIGHTED COVARIANCE MATRIX ==='
+        SVD = np.linalg.svd(covariance_matrix)
+        print pd.DataFrame(SVD[0].data)
+        pprint(SVD[1])
+        print pd.DataFrame(SVD[2].data)
+
+        print '=== FIRST EIGENVECTOR ==='
+        print(first_loading)
+
+        print '=== FIRST SCORES ==='
+        print(first_score)
+        # import pdb; pdb.set_trace()
+        # sys.exit(0)
+
         return first_loading, first_score
 
     def get_reward_weights(self, votes_filled):
@@ -171,6 +216,8 @@ class Oracle(object):
         # The scores show loadings on consensus (to what extent does
         # this observation represent consensus?)
         first_score = results[1]
+
+        # import pdb; pdb.set_trace()
 
         # Which of the two possible 'new' reputation vectors had more opinion in common
         # with the original 'old' reputation.
@@ -224,10 +271,10 @@ class Oracle(object):
                 
                 # The Reputation of the rows (players) who DID provide
                 # judgements, rescaled to sum to 1.
-                active_players_rep = self.reputation[-votes[:,i].mask]
-                active_players_rep[np.isnan(active_players_rep)] = 0
-                total_active_rep = np.sum(active_players_rep)
-                active_players_rep /= np.sum(active_players_rep)
+                active_rep = self.reputation[-votes[:,i].mask]
+                active_rep[np.isnan(active_rep)] = 0
+                total_active_rep = np.sum(active_rep)
+                active_rep /= np.sum(active_rep)
 
                 # The relevant Event with NAs removed.
                 # ("What these row-players had to say about the Events
@@ -236,9 +283,9 @@ class Oracle(object):
 
                 # Guess the outcome; discriminate based on contract type.
                 if not scaled_index[i]:
-                    outcome_guess = np.dot(active_events, active_players_rep)                    
+                    outcome_guess = np.dot(active_events, active_rep)                    
                 else:
-                    outcome_guess = weighted_median(active_events, active_players_rep)
+                    outcome_guess = weighted_median(active_events, active_rep)
                 outcomes_raw.append(outcome_guess)
 
             # Fill in the predictions to the original M
@@ -250,8 +297,6 @@ class Oracle(object):
             # This builds a matrix whose columns j:
             #   na_mat was false (the observation wasn't missing) - have a value of Zero
             #   na_mat was true (the observation was missing)     - have a value of the jth element of EventOutcomes.Raw (the 'current best guess')
-
-            import pdb; pdb.set_trace()
 
             votes_new += NAsToFill
             # This replaces the NAs, which were zeros, with the predicted Event outcome.
@@ -292,7 +337,7 @@ class Oracle(object):
         # Column Players (The Event Creators)
         # Calculation of Reward for Event Authors
         # Consensus - "Who won?" Event Outcome    
-        # Simple matrix multiplication ... highest information density at row_bonus,
+        # Simple matrix multiplication ... highest information density at voter_bonus,
         # but need EventOutcomes.Raw to get to that
         outcomes_raw = np.dot(player_info['smooth_rep'], votes_filled).squeeze()
 
@@ -353,12 +398,12 @@ class Oracle(object):
 
         # Combine Information
         # Row
-        na_bonus_rows = self.get_weight(participation_rows)
-        row_bonus = na_bonus_rows * percent_na + player_info['smooth_rep'] * (1 - percent_na)
+        na_bonus_voters = self.get_weight(participation_rows)
+        voter_bonus = na_bonus_voters * percent_na + player_info['smooth_rep'] * (1 - percent_na)
 
         # Column
-        na_bonus_columns = self.get_weight(participation_columns)
-        col_bonus = na_bonus_columns * percent_na + consensus_reward * (1 - percent_na)
+        na_bonus_events = self.get_weight(participation_columns)
+        author_bonus = na_bonus_events * percent_na + consensus_reward * (1 - percent_na)
 
         return {
             'original': self.votes.data,
@@ -369,8 +414,8 @@ class Oracle(object):
                 'smooth_rep': player_info['smooth_rep'][0],
                 'na_row': na_mat.sum(axis=1).data.tolist(),
                 'participation_rows': participation_rows.data.tolist(),
-                'relative_part': na_bonus_rows.data.tolist(),
-                'row_bonus': row_bonus.data.tolist(),
+                'relative_part': na_bonus_voters.data.tolist(),
+                'voter_bonus': voter_bonus.data.tolist(),
                 },
             'events': {
                 'adj_first_loadings': adj_first_loadings.data.tolist(),
@@ -379,7 +424,7 @@ class Oracle(object):
                 'certainty': certainty.data.tolist(),
                 'NAs Filled': na_mat.sum(axis=0).data.tolist(),
                 'participation_columns': participation_columns.data.tolist(),
-                'Author Bonus': col_bonus.data.tolist(),
+                'Author Bonus': author_bonus.data.tolist(),
                 'outcome_final': outcome_final,
                 },
             'participation': 1 - percent_na,
@@ -403,21 +448,51 @@ def main(argv=None):
             print(__doc__)
             return 0
         elif opt in ('-x', '--example'):
-            votes = [[1, 1, 0, 0],
-                     [1, 0, 0, 0],
-                     [1, 1, 0, 0],
-                     [1, 1, 1, 0],
-                     [0, 0, 1, 1],
-                     [0, 0, 1, 1]]
-            oracle = Oracle(votes=votes)
-            oracle.consensus()
+            # old: true=1, false=0, indeterminate=0.5, no response=-1
+            votes = np.array([[  1,  1,  0,  1],
+                              [  1,  0,  0,  0],
+                              [  1,  1,  0,  0],
+                              [  1,  1,  1,  0],
+                              [  1,  0,  1,  1],
+                              [  0,  0,  1,  1]])
+            # new: true=1, false=-1, indeterminate=0.5, no response=0
+            votes = np.array([[  1,  1, -1,  1],
+                              [  1, -1, -1, -1],
+                              [  1,  1, -1, -1],
+                              [  1,  1,  1, -1],
+                              [  1, -1,  1,  1],
+                              [ -1, -1,  1,  1]])
+            reputation = [2, 10, 4, 2, 7, 1]
+            oracle = Oracle(votes=votes, reputation=reputation)
+            pprint(oracle.consensus())
         elif opt in ('-m', '--missing'):
-            votes = [[1, 1, 0, np.nan],
-                     [1, 0, 0, 0],
-                     [1, 1, 0, 0],
-                     [1, 1, 1, 0],
-                     [np.nan, 0, 1, 1],
-                     [0, 0, 1, 1]]
+            # old: true=1, false=0, indeterminate=0.5, no response=-1
+            votes = np.array([[  1,  1,  0, -1],
+                              [  1,  0,  0,  0],
+                              [  1,  1,  0,  0],
+                              [  1,  1,  1,  0],
+                              [ -1,  0,  1,  1],
+                              [  0,  0,  1,  1]])
+            votes = np.array([[      1,  1,  0, np.nan],
+                              [      1,  0,  0,      0],
+                              [      1,  1,  0,      0],
+                              [      1,  1,  1,      0],
+                              [ np.nan,  0,  1,      1],
+                              [      0,  0,  1,      1]])
+            # new: true=1, false=-1, indeterminate=0.5, no response=0
+            votes = np.array([[  1,  1, -1,  0],
+                              [  1, -1, -1, -1],
+                              [  1,  1, -1, -1],
+                              [  1,  1,  1, -1],
+                              [  0, -1,  1,  1],
+                              [ -1, -1,  1,  1]])
+            # new: true=1, false=-1, indeterminate=0.5, no response=np.nan
+            votes = np.array([[      1,  1, -1, np.nan],
+                              [      1, -1, -1,     -1],
+                              [      1,  1, -1,     -1],
+                              [      1,  1,  1,     -1],
+                              [ np.nan, -1,  1,      1],
+                              [     -1, -1,  1,      1]])
             reputation = [2, 10, 4, 2, 7, 1]
             oracle = Oracle(votes=votes, reputation=reputation)
             pprint(oracle.consensus())
