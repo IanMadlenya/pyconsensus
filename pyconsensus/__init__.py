@@ -41,7 +41,7 @@ from weightedstats import weighted_median
 from six.moves import xrange as range
 
 __title__      = "pyconsensus"
-__version__    = "0.2.3"
+__version__    = "0.3"
 __author__     = "Paul Sztorc and Jack Peterson"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
@@ -299,6 +299,7 @@ class Oracle(object):
             #   na_mat was true (the observation was missing)     - have a value of the jth element of EventOutcomes.Raw (the 'current best guess')
 
             votes_new += NAsToFill
+
             # This replaces the NAs, which were zeros, with the predicted Event outcome.
 
             # Appropriately force the predictions into their discrete
