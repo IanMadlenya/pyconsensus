@@ -147,7 +147,7 @@ class Oracle(object):
         # Compute the weighted mean (of all reporters) for each event
         weighted_mean = np.ma.average(reports_filled,
                                       axis=0,
-                                      weights=self.reputation)
+                                      weights=self.reputation.tolist())
 
         if self.verbose:
             print('=== INPUTS ===')
@@ -455,60 +455,60 @@ def main(argv=None):
         elif opt in ('-x', '--example'):
             # old: true=1, false=0, indeterminate=0.5, no response=-1
             reports = np.array([[  1,  1,  0,  1],
-                              [  1,  0,  0,  0],
-                              [  1,  1,  0,  0],
-                              [  1,  1,  1,  0],
-                              [  1,  0,  1,  1],
-                              [  0,  0,  1,  1]])
+                                [  1,  0,  0,  0],
+                                [  1,  1,  0,  0],
+                                [  1,  1,  1,  0],
+                                [  1,  0,  1,  1],
+                                [  0,  0,  1,  1]])
             # new: true=1, false=-1, indeterminate=0.5, no response=0
             reports = np.array([[  1,  1, -1,  1],
-                              [  1, -1, -1, -1],
-                              [  1,  1, -1, -1],
-                              [  1,  1,  1, -1],
-                              [  1, -1,  1,  1],
-                              [ -1, -1,  1,  1]])
+                                [  1, -1, -1, -1],
+                                [  1,  1, -1, -1],
+                                [  1,  1,  1, -1],
+                                [  1, -1,  1,  1],
+                                [ -1, -1,  1,  1]])
             reputation = [2, 10, 4, 2, 7, 1]
             oracle = Oracle(reports=reports, reputation=reputation)
             pprint(oracle.consensus())
         elif opt in ('-m', '--missing'):
             # old: true=1, false=0, indeterminate=0.5, no response=-1
             reports = np.array([[  1,  1,  0, -1],
-                              [  1,  0,  0,  0],
-                              [  1,  1,  0,  0],
-                              [  1,  1,  1,  0],
-                              [ -1,  0,  1,  1],
-                              [  0,  0,  1,  1]])
+                                [  1,  0,  0,  0],
+                                [  1,  1,  0,  0],
+                                [  1,  1,  1,  0],
+                                [ -1,  0,  1,  1],
+                                [  0,  0,  1,  1]])
             reports = np.array([[      1,  1,  0, np.nan],
-                              [      1,  0,  0,      0],
-                              [      1,  1,  0,      0],
-                              [      1,  1,  1,      0],
-                              [ np.nan,  0,  1,      1],
-                              [      0,  0,  1,      1]])
+                                [      1,  0,  0,      0],
+                                [      1,  1,  0,      0],
+                                [      1,  1,  1,      0],
+                                [ np.nan,  0,  1,      1],
+                                [      0,  0,  1,      1]])
             # new: true=1, false=-1, indeterminate=0.5, no response=0
             reports = np.array([[  1,  1, -1,  0],
-                              [  1, -1, -1, -1],
-                              [  1,  1, -1, -1],
-                              [  1,  1,  1, -1],
-                              [  0, -1,  1,  1],
-                              [ -1, -1,  1,  1]])
+                                [  1, -1, -1, -1],
+                                [  1,  1, -1, -1],
+                                [  1,  1,  1, -1],
+                                [  0, -1,  1,  1],
+                                [ -1, -1,  1,  1]])
             # new: true=1, false=-1, indeterminate=0.5, no response=np.nan
             reports = np.array([[      1,  1, -1, np.nan],
-                              [      1, -1, -1,     -1],
-                              [      1,  1, -1,     -1],
-                              [      1,  1,  1,     -1],
-                              [ np.nan, -1,  1,      1],
-                              [     -1, -1,  1,      1]])
+                                [      1, -1, -1,     -1],
+                                [      1,  1, -1,     -1],
+                                [      1,  1,  1,     -1],
+                                [ np.nan, -1,  1,      1],
+                                [     -1, -1,  1,      1]])
             reputation = [2, 10, 4, 2, 7, 1]
             oracle = Oracle(reports=reports, reputation=reputation)
             pprint(oracle.consensus())
         elif opt in ('-t', '--test'):
             reports = np.array([[ 1, 0.5,  0,  0],
-                              [ 1, 0.5,  0,  0],
-                              [ 1,   1,  0,  0],
-                              [ 1, 0.5,  0,  0],
-                              [ 1, 0.5,  0,  0],
-                              [ 1, 0.5,  0,  0],
-                              [ 1, 0.5,  0,  0]])
+                                [ 1, 0.5,  0,  0],
+                                [ 1,   1,  0,  0],
+                                [ 1, 0.5,  0,  0],
+                                [ 1, 0.5,  0,  0],
+                                [ 1, 0.5,  0,  0],
+                                [ 1, 0.5,  0,  0]])
             
 
 if __name__ == '__main__':
