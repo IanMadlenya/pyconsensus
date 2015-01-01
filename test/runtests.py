@@ -70,55 +70,55 @@ if __name__ == "__main__":
             return 0
         elif opt in ('-x', '--example'):
             # old: true=1, false=0, indeterminate=0.5, no response=-1
-            votes = np.array([[  1,  1,  0,  1],
+            reports = np.array([[  1,  1,  0,  1],
                               [  1,  0,  0,  0],
                               [  1,  1,  0,  0],
                               [  1,  1,  1,  0],
                               [  1,  0,  1,  1],
                               [  0,  0,  1,  1]])
             # new: true=1, false=-1, indeterminate=0.5, no response=0
-            votes = np.array([[  1,  1, -1,  1],
+            reports = np.array([[  1,  1, -1,  1],
                               [  1, -1, -1, -1],
                               [  1,  1, -1, -1],
                               [  1,  1,  1, -1],
                               [  1, -1,  1,  1],
                               [ -1, -1,  1,  1]])
             reputation = [2, 10, 4, 2, 7, 1]
-            oracle = Oracle(votes=votes, reputation=reputation)
+            oracle = Oracle(reports=reports, reputation=reputation)
             pprint(oracle.consensus())
         elif opt in ('-m', '--missing'):
             # old: true=1, false=0, indeterminate=0.5, no response=-1
-            votes = np.array([[  1,  1,  0, -1],
+            reports = np.array([[  1,  1,  0, -1],
                               [  1,  0,  0,  0],
                               [  1,  1,  0,  0],
                               [  1,  1,  1,  0],
                               [ -1,  0,  1,  1],
                               [  0,  0,  1,  1]])
-            votes = np.array([[      1,  1,  0, np.nan],
+            reports = np.array([[      1,  1,  0, np.nan],
                               [      1,  0,  0,      0],
                               [      1,  1,  0,      0],
                               [      1,  1,  1,      0],
                               [ np.nan,  0,  1,      1],
                               [      0,  0,  1,      1]])
             # new: true=1, false=-1, indeterminate=0.5, no response=0
-            votes = np.array([[  1,  1, -1,  0],
+            reports = np.array([[  1,  1, -1,  0],
                               [  1, -1, -1, -1],
                               [  1,  1, -1, -1],
                               [  1,  1,  1, -1],
                               [  0, -1,  1,  1],
                               [ -1, -1,  1,  1]])
             # new: true=1, false=-1, indeterminate=0.5, no response=np.nan
-            votes = np.array([[      1,  1, -1, np.nan],
+            reports = np.array([[      1,  1, -1, np.nan],
                               [      1, -1, -1,     -1],
                               [      1,  1, -1,     -1],
                               [      1,  1,  1,     -1],
                               [ np.nan, -1,  1,      1],
                               [     -1, -1,  1,      1]])
             reputation = [2, 10, 4, 2, 7, 1]
-            oracle = Oracle(votes=votes, reputation=reputation)
+            oracle = Oracle(reports=reports, reputation=reputation)
             pprint(oracle.consensus())
         elif opt in ('-t', '--test'):
-            votes = np.array([[ 1, 0.5,  0,  0],
+            reports = np.array([[ 1, 0.5,  0,  0],
                               [ 1, 0.5,  0,  0],
                               [ 1,   1,  0,  0],
                               [ 1, 0.5,  0,  0],
