@@ -26,11 +26,11 @@ class TestConsensus(unittest.TestCase):
 
     def setUp(self):
         self.reports = [[1, 1, 0, 0],
-                      [1, 0, 0, 0],
-                      [1, 1, 0, 0],
-                      [1, 1, 1, 0],
-                      [0, 0, 1, 1],
-                      [0, 0, 1, 1]]
+                        [1, 0, 0, 0],
+                        [1, 1, 0, 0],
+                        [1, 1, 1, 0],
+                        [0, 0, 1, 1],
+                        [0, 0, 1, 1]]
         self.oracle = Oracle(reports=self.reports)
         self.c = [1, 2, 3, np.nan, 3]
         self.c2 = ma.masked_array(self.c, np.isnan(self.c))
@@ -46,7 +46,7 @@ class TestConsensus(unittest.TestCase):
         self.assertAlmostEquals(outcome["certainty"], 0.228237569613, places=11)
 
     def test_consensus_weighted(self):
-        reputation = np.array([[1], [1], [1], [1], [1], [1]])
+        reputation = np.array([1, 1, 1, 1, 1, 1])
         oracle = Oracle(reports=self.reports, reputation=reputation)
         outcome = oracle.consensus()
         self.assertTrue(0 <= outcome["certainty"] <= 1)
@@ -55,11 +55,11 @@ class TestConsensus(unittest.TestCase):
 
     def test_consensus_nans(self):
         reports = np.array([[1, 1, 0, 0],
-                          [1, 0, 0, 0],
-                          [1, 1, np.nan, 0],
-                          [1, 1, 1, 0],
-                          [0, 0, 1, 1],
-                          [0, 0, 1, 1]])
+                            [1, 0, 0, 0],
+                            [1, 1, np.nan, 0],
+                            [1, 1, 1, 0],
+                            [0, 0, 1, 1],
+                            [0, 0, 1, 1]])
         oracle = Oracle(reports=reports)
         outcome = oracle.consensus()
         self.assertTrue(0 <= outcome["certainty"] <= 1)
@@ -68,12 +68,12 @@ class TestConsensus(unittest.TestCase):
 
     def test_consensus_weighted_nans(self):
         reports = np.array([[1, 1, 0, 0],
-                          [1, 0, 0, 0],
-                          [1, 1, np.nan, 0],
-                          [1, 1, 1, 0],
-                          [0, 0, 1, 1],
-                          [0, 0, 1, 1]])
-        reputation = np.array([[1], [1], [1], [1], [1], [1]])
+                            [1, 0, 0, 0],
+                            [1, 1, np.nan, 0],
+                            [1, 1, 1, 0],
+                            [0, 0, 1, 1],
+                            [0, 0, 1, 1]])
+        reputation = np.array([1, 1, 1, 1, 1, 1])
         oracle = Oracle(reports=reports, reputation=reputation)
         outcome = oracle.consensus()
         # print(outcome["Agents"]["OldRep"])
@@ -84,11 +84,11 @@ class TestConsensus(unittest.TestCase):
 
     def test_consensus_scaled(self):
         reports = [[ 0.3, 0.2, 0, 0],
-                 [ 0.5, 0.3, 0, 0],
-                 [ 0.4, 0.1, 0, 0],
-                 [ 0.2, 0.7, 1, 0],
-                 [ 0.1, 0.3, 1, 1],
-                 [0.15, 0.2, 1, 1]]
+                   [ 0.5, 0.3, 0, 0],
+                   [ 0.4, 0.1, 0, 0],
+                   [ 0.2, 0.7, 1, 0],
+                   [ 0.1, 0.3, 1, 1],
+                   [0.15, 0.2, 1, 1]]
         scalar_event_params = [
             {"scaled": True, "min": 0.1, "max": 0.5},
             {"scaled": True, "min": 0.2, "max": 0.7},
@@ -103,11 +103,11 @@ class TestConsensus(unittest.TestCase):
 
     def test_consensus_scaled_nans(self):
         reports = np.array([[ 0.3, 0.2, 0, 0],
-                          [ 0.5, 0.3, np.nan, 0],
-                          [ 0.4, 0.1, 0, 0],
-                          [ 0.2, 0.7, 1, 0],
-                          [ 0.1, 0.3, 1, 1],
-                          [0.15, 0.2, 1, 1]])
+                            [ 0.5, 0.3, np.nan, 0],
+                            [ 0.4, 0.1, 0, 0],
+                            [ 0.2, 0.7, 1, 0],
+                            [ 0.1, 0.3, 1, 1],
+                            [0.15, 0.2, 1, 1]])
         scalar_event_params = [
             {"scaled": True, "min": 0.1, "max": 0.5},
             {"scaled": True, "min": 0.2, "max": 0.7},
@@ -123,11 +123,11 @@ class TestConsensus(unittest.TestCase):
 
     def test_consensus_weighted_scaled_nans(self):
         reports = np.array([[ 0.3, 0.2, 0, 0],
-                          [ 0.5, 0.3, np.nan, 0],
-                          [ 0.4, 0.1, 0, 0],
-                          [ 0.2, 0.7, 1, 0],
-                          [ 0.1, 0.3, 1, 1],
-                          [0.15, 0.2, 1, 1]])
+                            [ 0.5, 0.3, np.nan, 0],
+                            [ 0.4, 0.1, 0, 0],
+                            [ 0.2, 0.7, 1, 0],
+                            [ 0.1, 0.3, 1, 1],
+                            [0.15, 0.2, 1, 1]])
         scalar_event_params = [
             {"scaled": True, "min": 0.1, "max": 0.5},
             {"scaled": True, "min": 0.2, "max": 0.7},
@@ -136,7 +136,7 @@ class TestConsensus(unittest.TestCase):
         ]
         oracle = Oracle(reports=reports,
                         event_bounds=scalar_event_params,
-                        reputation=np.array([[1]] * 6))
+                        reputation=np.array([1] * 6))
         outcome = oracle.consensus()
         self.assertTrue(0 <= outcome["certainty"] <= 1)
         self.assertTrue(0 <= outcome["participation"] <= 1)
