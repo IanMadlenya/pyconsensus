@@ -13,11 +13,11 @@ Usage:
     #   - each row represents a reporter
     #   - each column represents a event in a prediction market
     my_reports = [[1, 1, 0, 0],
-                [1, 0, 0, 0],
-                [1, 1, 0, 0],
-                [1, 1, 1, 0],
-                [0, 0, 1, 1],
-                [0, 0, 1, 1]]
+                  [1, 0, 0, 0],
+                  [1, 1, 0, 0],
+                  [1, 1, 1, 0],
+                  [0, 0, 1, 1],
+                  [0, 0, 1, 1]]
     my_event_bounds = [
         {"scaled": True, "min": 0.1, "max": 0.5},
         {"scaled": True, "min": 0.2, "max": 0.7},
@@ -150,18 +150,18 @@ class Oracle(object):
                                       weights=self.reputation)
 
         if self.verbose:
-            print '=== INPUTS ==='
+            print('=== INPUTS ===')
             print(reports_filled.data)
             print(self.reputation)
 
-            print '=== WEIGHTED MEANS ==='
+            print('=== WEIGHTED MEANS ===')
             print(weighted_mean)
 
         # Each report's difference from the mean of its event (column)
         mean_deviation = np.matrix(reports_filled - weighted_mean)
 
         if self.verbose:
-            print '=== WEIGHTED CENTERED DATA ==='
+            print('=== WEIGHTED CENTERED DATA ===')
             print(mean_deviation)
 
         # Compute the unbiased weighted population covariance
@@ -172,7 +172,7 @@ class Oracle(object):
         covariance_matrix = 1/float(1 - ssq) * np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation)
 
         if self.verbose:
-            print '=== WEIGHTED COVARIANCES ==='
+            print('=== WEIGHTED COVARIANCES ===')
             print(covariance_matrix)
 
         return covariance_matrix, mean_deviation
@@ -191,15 +191,15 @@ class Oracle(object):
         SVD = np.linalg.svd(covariance_matrix)
 
         if self.verbose:
-            print '=== FROM SINGULAR VALUE DECOMPOSITION OF WEIGHTED COVARIANCE MATRIX ==='
-            print pd.DataFrame(SVD[0].data)
+            print('=== FROM SINGULAR VALUE DECOMPOSITION OF WEIGHTED COVARIANCE MATRIX ===')
+            print(pd.DataFrame(SVD[0].data))
             pprint(SVD[1])
-            print pd.DataFrame(SVD[2].data)
+            print(pd.DataFrame(SVD[2].data))
 
-            print '=== FIRST EIGENVECTOR ==='
+            print('=== FIRST EIGENVECTOR ===')
             print(first_loading)
 
-            print '=== FIRST SCORES ==='
+            print('=== FIRST SCORES ===')
             print(first_score)
             # import pdb; pdb.set_trace()
             # sys.exit(0)
