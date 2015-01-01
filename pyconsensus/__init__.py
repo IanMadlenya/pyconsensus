@@ -9,10 +9,10 @@ Usage:
 
     from pyconsensus import Oracle
 
-    # Example vote matrix:
-    #   - each row represents a voter
+    # Example report matrix:
+    #   - each row represents a reporter
     #   - each column represents a event in a prediction market
-    my_votes = [[1, 1, 0, 0],
+    my_reports = [[1, 1, 0, 0],
                 [1, 0, 0, 0],
                 [1, 1, 0, 0],
                 [1, 1, 1, 0],
@@ -25,7 +25,7 @@ Usage:
         {"scaled": False, "min": 0, "max": 1},
     ]
 
-    oracle = Oracle(votes=my_votes, event_bounds=my_event_bounds)
+    oracle = Oracle(reports=my_reports, event_bounds=my_event_bounds)
     oracle.consensus()
 
 """
@@ -57,11 +57,11 @@ np.set_printoptions(linewidth=500,
 
 class Oracle(object):
 
-    def __init__(self, votes=None, event_bounds=None, reputation=None,
+    def __init__(self, reports=None, event_bounds=None, reputation=None,
                  catch_tolerance=0.1, max_row=5000, alpha=0.1, verbose=False):
         """
         Args:
-          votes (list-of-lists): votes matrix; rows = voters, columns = Events.
+          reports (list-of-lists): reports matrix; rows = reporters, columns = Events.
           event_bounds (list): list of dicts for each Event
             {
               scaled (bool): True if scalar, False if binary (boolean)
@@ -70,17 +70,17 @@ class Oracle(object):
             }
 
         """
-        self.votes = np.ma.masked_array(votes, np.isnan(votes))
+        self.reports = np.ma.masked_array(reports, np.isnan(reports))
         self.event_bounds = event_bounds
         self.catch_tolerance = catch_tolerance
         self.max_row = max_row
         self.alpha = alpha
         self.verbose = verbose
-        self.num_votes = len(votes)
+        self.num_reports = len(reports)
         if reputation is None:
             self.weighted = False
-            self.total_rep = self.num_votes
-            self.reputation = np.array([1 / float(self.num_votes)] * self.num_votes)
+            self.total_rep = self.num_reports
+            self.reputation = np.array([1 / float(self.num_reports)] * self.num_reports)
             # print "rep:", self.reputation
             self.rep_coins = (np.copy(self.reputation) * 10**6).astype(int)
             # print "repcoins:", self.rep_coins
@@ -112,8 +112,8 @@ class Oracle(object):
             inv_span.append(1 / float(scale["max"] - scale["min"]))
 
         # Recenter
-        out_matrix = np.ma.copy(self.votes)
-        cols = self.votes.shape[1]
+        out_matrix = np.ma.copy(self.reports)
+        cols = self.reports.shape[1]
         for i in range(cols):
             out_matrix[:,i] -= self.event_bounds[i]["min"]
 
@@ -138,34 +138,34 @@ class Oracle(object):
         else:
             return .5
 
-    def weighted_cov(self, votes_filled):
+    def weighted_cov(self, reports_filled):
         """Weights are the number of coins people start with, so the aim of this
-        weighting is to count 1 vote for each of their coins -- e.g., guy with 10
-        coins effectively gets 10 votes, guy with 1 coin gets 1 vote, etc.
+        weighting is to count 1 report for each of their coins -- e.g., guy with 10
+        coins effectively gets 10 reports, guy with 1 coin gets 1 report, etc.
 
         """
-        # Compute the weighted mean (of all voters) for each event
-        weighted_mean = np.ma.average(votes_filled,
+        # Compute the weighted mean (of all reporters) for each event
+        weighted_mean = np.ma.average(reports_filled,
                                       axis=0,
                                       weights=self.reputation)
 
         if self.verbose:
             print '=== INPUTS ==='
-            print(votes_filled.data)
+            print(reports_filled.data)
             print(self.reputation)
 
             print '=== WEIGHTED MEANS ==='
             print(weighted_mean)
 
-        # Each vote's difference from the mean of its event (column)
-        mean_deviation = np.matrix(votes_filled - weighted_mean)
+        # Each report's difference from the mean of its event (column)
+        mean_deviation = np.matrix(reports_filled - weighted_mean)
 
         if self.verbose:
             print '=== WEIGHTED CENTERED DATA ==='
             print(mean_deviation)
 
         # Compute the unbiased weighted population covariance
-        # (for uniform weights, equal to np.cov(votes_filled.T, bias=1))
+        # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
         # covariance_matrix = 1/float(np.sum(self.rep_coins)-1) * np.ma.multiply(mean_deviation.T, self.rep_coins).dot(mean_deviation)
         # ssq = np.sum(self.total_rep_coins**2)
         ssq = np.sum(self.reputation**2)
@@ -177,13 +177,13 @@ class Oracle(object):
 
         return covariance_matrix, mean_deviation
 
-    def weighted_prin_comp(self, votes_filled):
-        """Principal Component Analysis (PCA) on the votes matrix.
+    def weighted_prin_comp(self, reports_filled):
+        """Principal Component Analysis (PCA) on the reports matrix.
 
-        The votes matrix has voters as rows and events as columns.
+        The reports matrix has reporters as rows and events as columns.
 
         """
-        covariance_matrix, mean_deviation = self.weighted_cov(votes_filled)
+        covariance_matrix, mean_deviation = self.weighted_cov(reports_filled)
         U = np.linalg.svd(covariance_matrix)[0]
         first_loading = U.T[0]
         first_score = np.dot(mean_deviation, U).T[0]
@@ -206,12 +206,12 @@ class Oracle(object):
 
         return first_loading, first_score
 
-    def get_reward_weights(self, votes_filled):
+    def get_reward_weights(self, reports_filled):
         """Calculates new reputations using a weighted
         Principal Component Analysis (PCA).
 
         """
-        results = self.weighted_prin_comp(votes_filled)
+        results = self.weighted_prin_comp(reports_filled)
         
         # The first loading (largest eigenvector) is designed to indicate
         # which Events were more 'agreed-upon' than others.
@@ -227,9 +227,9 @@ class Oracle(object):
         # with the original 'old' reputation.
         set1 = first_score + abs(min(first_score))
         set2 = first_score - max(first_score)
-        old = np.dot(self.rep_coins.T, votes_filled)
-        new1 = np.dot(self.get_weight(set1), votes_filled)
-        new2 = np.dot(self.get_weight(set2), votes_filled)
+        old = np.dot(self.rep_coins.T, reports_filled)
+        new1 = np.dot(self.get_weight(set1), reports_filled)
+        new2 = np.dot(self.get_weight(set2), reports_filled)
 
         # Difference in sum of squared errors. If > 0, then new1 had higher
         # errors (use new2); conversely if < 0, then use new1.
@@ -261,21 +261,21 @@ class Oracle(object):
             "smooth_rep": smooth_rep,
         }
 
-    def fill_na(self, votes, scaled_index):
+    def fill_na(self, reports, scaled_index):
         """Uses existing data and reputations to fill missing observations.
         Essentially a weighted average using all availiable non-NA data.
         """
-        votes_new = np.ma.copy(votes)
-        if votes.mask.any():
+        reports_new = np.ma.copy(reports)
+        if reports.mask.any():
             
             # Our best guess for the Event state (FALSE=0, Ambiguous=.5, TRUE=1)
             # so far (ie, using the present, non-missing, values).
             outcomes_raw = []
-            for i in range(votes.shape[1]):
+            for i in range(reports.shape[1]):
                 
                 # The Reputation of the rows (players) who DID provide
                 # judgements, rescaled to sum to 1.
-                active_rep = self.reputation[-votes[:,i].mask]
+                active_rep = self.reputation[-reports[:,i].mask]
                 active_rep[np.isnan(active_rep)] = 0
                 total_active_rep = np.sum(active_rep)
                 active_rep /= np.sum(active_rep)
@@ -283,7 +283,7 @@ class Oracle(object):
                 # The relevant Event with NAs removed.
                 # ("What these row-players had to say about the Events
                 # they DID judge.")
-                active_events = votes[-votes[:,i].mask, i]
+                active_events = reports[-reports[:,i].mask, i]
 
                 # Guess the outcome; discriminate based on contract type.
                 if not scaled_index[i]:
@@ -293,8 +293,8 @@ class Oracle(object):
                 outcomes_raw.append(outcome_guess)
 
             # Fill in the predictions to the original M
-            na_mat = votes.mask  # Defines the slice of the matrix which needs to be edited.
-            votes_new[na_mat] = 0  # Erase the NA's
+            na_mat = reports.mask  # Defines the slice of the matrix which needs to be edited.
+            reports_new[na_mat] = 0  # Erase the NA's
 
             # Slightly complicated:
             NAsToFill = np.dot(na_mat, np.diag(outcomes_raw))
@@ -302,19 +302,19 @@ class Oracle(object):
             #   na_mat was false (the observation wasn't missing) - have a value of Zero
             #   na_mat was true (the observation was missing)     - have a value of the jth element of EventOutcomes.Raw (the 'current best guess')
 
-            votes_new += NAsToFill
+            reports_new += NAsToFill
 
             # This replaces the NAs, which were zeros, with the predicted Event outcome.
 
             # Appropriately force the predictions into their discrete
             # (0,.5,1) slot. (continuous variables can be gamed).
-            rows, cols = votes_new.shape
+            rows, cols = reports_new.shape
             for i in range(rows):
                 for j in range(cols):
                     if not scaled_index[j]:
-                        votes_new[i][j] = self.catch(votes_new[i][j])
+                        reports_new[i][j] = self.catch(reports_new[i][j])
 
-        return votes_new
+        return reports_new
 
     def consensus(self):
         """PCA-based consensus algorithm.
@@ -325,32 +325,32 @@ class Oracle(object):
         """
         # Fill the default scales (binary) if none are provided.
         if self.event_bounds is None:
-            scaled_index = [False] * self.votes.shape[1]
-            scaled_votes = self.votes
+            scaled_index = [False] * self.reports.shape[1]
+            scaled_reports = self.reports
         else:
             scaled_index = [scale["scaled"] for scale in self.event_bounds]
-            scaled_votes = self.rescale()
+            scaled_reports = self.rescale()
 
         # Handle missing values
-        votes_filled = self.fill_na(scaled_votes, scaled_index)
+        reports_filled = self.fill_na(scaled_reports, scaled_index)
 
         # Consensus - Row Players
         # New Consensus Reward
-        player_info = self.get_reward_weights(votes_filled)
+        player_info = self.get_reward_weights(reports_filled)
         adj_first_loadings = player_info['first_loading']
 
         # Column Players (The Event Creators)
         # Calculation of Reward for Event Authors
         # Consensus - "Who won?" Event Outcome    
-        # Simple matrix multiplication ... highest information density at voter_bonus,
+        # Simple matrix multiplication ... highest information density at reporter_bonus,
         # but need EventOutcomes.Raw to get to that
-        outcomes_raw = np.dot(player_info['smooth_rep'], votes_filled).squeeze()
+        outcomes_raw = np.dot(player_info['smooth_rep'], reports_filled).squeeze()
 
         # Discriminate Based on Contract Type
-        for i in range(votes_filled.shape[1]):
+        for i in range(reports_filled.shape[1]):
             # Our Current best-guess for this Scaled Event (weighted median)
             if scaled_index[i]:
-                outcomes_raw[i] = weighted_median(votes_filled[:,i],
+                outcomes_raw[i] = weighted_median(reports_filled[:,i],
                                                   player_info["smooth_rep"].ravel())
 
         # .5 is obviously undesireable, this function travels from 0 to 1
@@ -378,7 +378,7 @@ class Oracle(object):
 
         # Participation
         # Information about missing values
-        na_mat = self.votes * 0
+        na_mat = self.reports * 0
         na_mat[na_mat.mask] = 1  # indicator matrix for missing
 
         # Participation Within Events (Columns)
@@ -403,24 +403,24 @@ class Oracle(object):
 
         # Combine Information
         # Row
-        na_bonus_voters = self.get_weight(participation_rows)
-        voter_bonus = na_bonus_voters * percent_na + player_info['smooth_rep'] * (1 - percent_na)
+        na_bonus_reporters = self.get_weight(participation_rows)
+        reporter_bonus = na_bonus_reporters * percent_na + player_info['smooth_rep'] * (1 - percent_na)
 
         # Column
         na_bonus_events = self.get_weight(participation_columns)
         author_bonus = na_bonus_events * percent_na + consensus_reward * (1 - percent_na)
 
         return {
-            'original': self.votes.data,
-            'filled': votes_filled.data,
+            'original': self.reports.data,
+            'filled': reports_filled.data,
             'agents': {
                 'old_rep': player_info['old_rep'][0],
                 'this_rep': player_info['this_rep'][0],
                 'smooth_rep': player_info['smooth_rep'][0],
                 'na_row': na_mat.sum(axis=1).data.tolist(),
                 'participation_rows': participation_rows.data.tolist(),
-                'relative_part': na_bonus_voters.data.tolist(),
-                'voter_bonus': voter_bonus.data.tolist(),
+                'relative_part': na_bonus_reporters.data.tolist(),
+                'reporter_bonus': reporter_bonus.data.tolist(),
                 },
             'events': {
                 'adj_first_loadings': adj_first_loadings.data.tolist(),
@@ -454,55 +454,55 @@ def main(argv=None):
             return 0
         elif opt in ('-x', '--example'):
             # old: true=1, false=0, indeterminate=0.5, no response=-1
-            votes = np.array([[  1,  1,  0,  1],
+            reports = np.array([[  1,  1,  0,  1],
                               [  1,  0,  0,  0],
                               [  1,  1,  0,  0],
                               [  1,  1,  1,  0],
                               [  1,  0,  1,  1],
                               [  0,  0,  1,  1]])
             # new: true=1, false=-1, indeterminate=0.5, no response=0
-            votes = np.array([[  1,  1, -1,  1],
+            reports = np.array([[  1,  1, -1,  1],
                               [  1, -1, -1, -1],
                               [  1,  1, -1, -1],
                               [  1,  1,  1, -1],
                               [  1, -1,  1,  1],
                               [ -1, -1,  1,  1]])
             reputation = [2, 10, 4, 2, 7, 1]
-            oracle = Oracle(votes=votes, reputation=reputation)
+            oracle = Oracle(reports=reports, reputation=reputation)
             pprint(oracle.consensus())
         elif opt in ('-m', '--missing'):
             # old: true=1, false=0, indeterminate=0.5, no response=-1
-            votes = np.array([[  1,  1,  0, -1],
+            reports = np.array([[  1,  1,  0, -1],
                               [  1,  0,  0,  0],
                               [  1,  1,  0,  0],
                               [  1,  1,  1,  0],
                               [ -1,  0,  1,  1],
                               [  0,  0,  1,  1]])
-            votes = np.array([[      1,  1,  0, np.nan],
+            reports = np.array([[      1,  1,  0, np.nan],
                               [      1,  0,  0,      0],
                               [      1,  1,  0,      0],
                               [      1,  1,  1,      0],
                               [ np.nan,  0,  1,      1],
                               [      0,  0,  1,      1]])
             # new: true=1, false=-1, indeterminate=0.5, no response=0
-            votes = np.array([[  1,  1, -1,  0],
+            reports = np.array([[  1,  1, -1,  0],
                               [  1, -1, -1, -1],
                               [  1,  1, -1, -1],
                               [  1,  1,  1, -1],
                               [  0, -1,  1,  1],
                               [ -1, -1,  1,  1]])
             # new: true=1, false=-1, indeterminate=0.5, no response=np.nan
-            votes = np.array([[      1,  1, -1, np.nan],
+            reports = np.array([[      1,  1, -1, np.nan],
                               [      1, -1, -1,     -1],
                               [      1,  1, -1,     -1],
                               [      1,  1,  1,     -1],
                               [ np.nan, -1,  1,      1],
                               [     -1, -1,  1,      1]])
             reputation = [2, 10, 4, 2, 7, 1]
-            oracle = Oracle(votes=votes, reputation=reputation)
+            oracle = Oracle(reports=reports, reputation=reputation)
             pprint(oracle.consensus())
         elif opt in ('-t', '--test'):
-            votes = np.array([[ 1, 0.5,  0,  0],
+            reports = np.array([[ 1, 0.5,  0,  0],
                               [ 1, 0.5,  0,  0],
                               [ 1,   1,  0,  0],
                               [ 1, 0.5,  0,  0],

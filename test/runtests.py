@@ -8,6 +8,8 @@ from __future__ import division
 import os
 import sys
 import platform
+from pprint import pprint
+from colorama import Fore, Style, init
 import numpy as np
 import numpy.ma as ma
 if platform.python_version() < "2.7":
@@ -21,6 +23,34 @@ sys.path.insert(0, os.path.join(HERE, os.pardir))
 sys.path.insert(0, os.path.join(HERE, os.pardir, "pyconsensus"))
 
 from pyconsensus import Oracle, main
+
+np.set_printoptions(linewidth=500)
+
+tolerance = 1e-12
+init()
+
+def BR(string): # bright red
+    return "\033[1;31m" + str(string) + "\033[0m"
+
+def BB(string): # bright blue
+    return Fore.BLUE + Style.BRIGHT + str(string) + Style.RESET_ALL
+
+def BG(string): # bright green
+    return Fore.GREEN + Style.BRIGHT + str(string) + Style.RESET_ALL
+
+def blocky(*strings, **kwds):
+    colored = kwds.get("colored", True)
+    width = kwds.get("width", 108)
+    bound = width*"#"
+    fmt = "#{:^%d}#" % (width - 2)
+    lines = [bound]
+    for string in strings:
+        lines.append(fmt.format(string))
+    lines.append(bound)
+    lines = "\n".join(lines)
+    if colored:
+        lines = BR(lines)
+    return lines
 
 if __name__ == "__main__":
     np.set_printoptions(linewidth=500)
