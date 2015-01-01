@@ -41,7 +41,7 @@ from weightedstats import weighted_median
 from six.moves import xrange as range
 
 __title__      = "pyconsensus"
-__version__    = "0.2.3"
+__version__    = "0.3"
 __author__     = "Paul Sztorc and Jack Peterson"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
@@ -49,7 +49,6 @@ __email__      = "jack@tinybike.net"
 
 pd.set_option("display.max_rows", 25)
 pd.set_option("display.width", 1000)
-pd.options.display.mpl_style = "default"
 
 np.set_printoptions(linewidth=500,
                     precision=5,
@@ -82,20 +81,20 @@ class Oracle(object):
             self.weighted = False
             self.total_rep = self.num_votes
             self.reputation = np.array([1 / float(self.num_votes)] * self.num_votes)
-            print "rep:", self.reputation
+            # print "rep:", self.reputation
             self.rep_coins = (np.copy(self.reputation) * 10**6).astype(int)
-            print "repcoins:", self.rep_coins
+            # print "repcoins:", self.rep_coins
             self.total_rep_coins = sum(self.rep_coins)
         else:
             self.weighted = True
             self.total_rep = sum(np.array(reputation).ravel())
-            print "input rep:", reputation
+            # print "input rep:", reputation
             self.reputation = np.array([i / float(self.total_rep) for i in reputation])
             # self.reputation = reputation
-            print "rep:      ", self.reputation
+            # print "rep:      ", self.reputation
             self.rep_coins = (np.abs(np.copy(reputation)) * 10**6).astype(int)
             # self.rep_coins = reputation
-            print "repcoins: ", self.rep_coins
+            # print "repcoins: ", self.rep_coins
             self.total_rep_coins = sum(self.rep_coins)
 
     def rescale(self):
@@ -150,18 +149,20 @@ class Oracle(object):
                                       axis=0,
                                       weights=self.reputation)
 
-        print '=== INPUTS ==='
-        print(votes_filled.data)
-        print(self.reputation)
+        if self.verbose:
+            print '=== INPUTS ==='
+            print(votes_filled.data)
+            print(self.reputation)
 
-        print '=== WEIGHTED MEANS ==='
-        print(weighted_mean)
+            print '=== WEIGHTED MEANS ==='
+            print(weighted_mean)
 
         # Each vote's difference from the mean of its event (column)
         mean_deviation = np.matrix(votes_filled - weighted_mean)
 
-        print '=== WEIGHTED CENTERED DATA ==='
-        print(mean_deviation)
+        if self.verbose:
+            print '=== WEIGHTED CENTERED DATA ==='
+            print(mean_deviation)
 
         # Compute the unbiased weighted population covariance
         # (for uniform weights, equal to np.cov(votes_filled.T, bias=1))
@@ -170,8 +171,9 @@ class Oracle(object):
         ssq = np.sum(self.reputation**2)
         covariance_matrix = 1/float(1 - ssq) * np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation)
 
-        print '=== WEIGHTED COVARIANCES ==='
-        print(covariance_matrix)
+        if self.verbose:
+            print '=== WEIGHTED COVARIANCES ==='
+            print(covariance_matrix)
 
         return covariance_matrix, mean_deviation
 
@@ -186,19 +188,21 @@ class Oracle(object):
         first_loading = U.T[0]
         first_score = np.dot(mean_deviation, U).T[0]
 
-        print '=== FROM SINGULAR VALUE DECOMPOSITION OF WEIGHTED COVARIANCE MATRIX ==='
         SVD = np.linalg.svd(covariance_matrix)
-        print pd.DataFrame(SVD[0].data)
-        pprint(SVD[1])
-        print pd.DataFrame(SVD[2].data)
 
-        print '=== FIRST EIGENVECTOR ==='
-        print(first_loading)
+        if self.verbose:
+            print '=== FROM SINGULAR VALUE DECOMPOSITION OF WEIGHTED COVARIANCE MATRIX ==='
+            print pd.DataFrame(SVD[0].data)
+            pprint(SVD[1])
+            print pd.DataFrame(SVD[2].data)
 
-        print '=== FIRST SCORES ==='
-        print(first_score)
-        # import pdb; pdb.set_trace()
-        # sys.exit(0)
+            print '=== FIRST EIGENVECTOR ==='
+            print(first_loading)
+
+            print '=== FIRST SCORES ==='
+            print(first_score)
+            # import pdb; pdb.set_trace()
+            # sys.exit(0)
 
         return first_loading, first_score
 
@@ -424,7 +428,7 @@ class Oracle(object):
                 'certainty': certainty.data.tolist(),
                 'NAs Filled': na_mat.sum(axis=0).data.tolist(),
                 'participation_columns': participation_columns.data.tolist(),
-                'Author Bonus': author_bonus.data.tolist(),
+                'author_bonus': author_bonus.data.tolist(),
                 'outcome_final': outcome_final,
                 },
             'participation': 1 - percent_na,
@@ -496,6 +500,15 @@ def main(argv=None):
             reputation = [2, 10, 4, 2, 7, 1]
             oracle = Oracle(votes=votes, reputation=reputation)
             pprint(oracle.consensus())
+        elif opt in ('-t', '--test'):
+            votes = np.array([[ 1, 0.5,  0,  0],
+                              [ 1, 0.5,  0,  0],
+                              [ 1,   1,  0,  0],
+                              [ 1, 0.5,  0,  0],
+                              [ 1, 0.5,  0,  0],
+                              [ 1, 0.5,  0,  0],
+                              [ 1, 0.5,  0,  0]])
+            
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv))
