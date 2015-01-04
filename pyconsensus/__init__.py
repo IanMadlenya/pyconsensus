@@ -51,9 +51,8 @@ pd.set_option("display.max_rows", 25)
 pd.set_option("display.width", 1000)
 
 np.set_printoptions(linewidth=500,
-                    precision=5,
                     suppress=True,
-                    formatter={"float": "{: 0.3f}".format})
+                    formatter={"float": "{: 0.6f}".format})
 
 class Oracle(object):
 
