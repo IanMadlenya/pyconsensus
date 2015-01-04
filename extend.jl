@@ -11,7 +11,7 @@ reports = [ 1  1  0  0 ;
             0  0  1  1 ;
             0  0  1  1 ]
 
-reputation = [1; 1; 1; 1; 1; 1]
+reputation = [2; 10; 4; 2; 7; 1]
 reputation = PyArray(PyObject(reputation))
 
 oracle = pyconsensus.Oracle(reports=reports, reputation=reputation)
