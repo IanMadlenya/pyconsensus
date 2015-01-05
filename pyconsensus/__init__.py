@@ -141,12 +141,14 @@ class Oracle(object):
 
     def catch(self, X):
         """Forces continuous values into bins at -1, 0, and 1"""
-        if X < 0 * (1 - self.catch_tolerance):
-            return -1
-        elif X > 0 * (1 + self.catch_tolerance):
+        center = 0.5
+        print X, " vs ", center * (1 - self.catch_tolerance)
+        if X < center * (1 - self.catch_tolerance):
+            return 0
+        elif X > center * (1 + self.catch_tolerance):
             return 1
         else:
-            return 0
+            return 0.5
 
     def weighted_cov(self, reports_filled):
         """Weights are the number of coins people start with, so the aim of this
@@ -363,16 +365,6 @@ class Oracle(object):
                 outcomes_raw[i] = weighted_median(reports_filled[:,i],
                                                   player_info["smooth_rep"].ravel())
 
-        # .5 is obviously undesireable, this function travels from 0 to 1
-        # with a minimum at .5
-        certainty = abs(2 * (outcomes_raw - 0.5))
-
-        # Grading Authors on a curve.
-        consensus_reward = self.get_weight(certainty)
-
-        # How well did beliefs converge?
-        avg_certainty = np.mean(certainty)
-
         # The Outcome (Discriminate Based on Contract Type)
         outcome_adj = []
         for i, raw in enumerate(outcomes_raw):
@@ -385,6 +377,20 @@ class Oracle(object):
             outcome_final.append(outcome_adj[i])
             if scaled_index[i]:
                 outcome_final[i] *= (self.event_bounds[i]["max"] - self.event_bounds[i]["min"])
+
+        # .5 is obviously undesireable, this function travels from 0 to 1
+        # with a minimum at .5
+        # certainty = abs(2 * (outcomes_raw - 0.5))
+        certainty = []
+        for i, adj in enumerate(outcome_adj):
+            certainty.append(sum(player_info["smooth_rep"][reports_filled[:,i] == adj]))
+        certainty = np.array(certainty)
+
+        # Grading Authors on a curve.
+        consensus_reward = self.get_weight(certainty)
+
+        # How well did beliefs converge?
+        avg_certainty = np.mean(certainty)
 
         # Participation
         # Information about missing values
@@ -463,22 +469,29 @@ def main(argv=None):
             print(__doc__)
             return 0
         elif opt in ('-x', '--example'):
-            # old: true=1, false=0, indeterminate=0.5, no response=-1
-            reports = np.array([[  1,  1,  0,  1],
-                                [  1,  0,  0,  0],
-                                [  1,  1,  0,  0],
-                                [  1,  1,  1,  0],
-                                [  1,  0,  1,  1],
-                                [  0,  0,  1,  1]])
-            # new: true=1, false=-1, indeterminate=0.5, no response=0
-            reports = np.array([[  1,  1, -1,  1],
-                                [  1, -1, -1, -1],
-                                [  1,  1, -1, -1],
-                                [  1,  1,  1, -1],
-                                [  1, -1,  1,  1],
-                                [ -1, -1,  1,  1]])
-            reputation = [2, 10, 4, 2, 7, 1]
-            oracle = Oracle(reports=reports, reputation=reputation)
+            # # old: true=1, false=0, indeterminate=0.5, no response=-1
+            # reports = np.array([[  1,  1,  0,  1],
+            #                     [  1,  0,  0,  0],
+            #                     [  1,  1,  0,  0],
+            #                     [  1,  1,  1,  0],
+            #                     [  1,  0,  1,  1],
+            #                     [  0,  0,  1,  1]])
+            # # new: true=1, false=-1, indeterminate=0.5, no response=0
+            # reports = np.array([[  1,  1, -1,  1],
+            #                     [  1, -1, -1, -1],
+            #                     [  1,  1, -1, -1],
+            #                     [  1,  1,  1, -1],
+            #                     [  1, -1,  1,  1],
+            #                     [ -1, -1,  1,  1]])
+            # reputation = [2, 10, 4, 2, 7, 1]
+            reports = np.array([[1, 1, 0, 0],
+                                [1, 0, 0, 0],
+                                [1, 1, 0, 0],
+                                [1, 1, 1, 0],
+                                [0, 0, 1, 1],
+                                [0, 0, 1, 1]])
+            # oracle = Oracle(reports=reports, reputation=reputation)
+            oracle = Oracle(reports=reports)
             pprint(oracle.consensus())
         elif opt in ('-m', '--missing'):
             # old: true=1, false=0, indeterminate=0.5, no response=-1
