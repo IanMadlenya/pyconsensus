@@ -54,6 +54,17 @@ np.set_printoptions(linewidth=500,
                     suppress=True,
                     formatter={"float": "{: 0.6f}".format})
 
+# reports = [[ 1,  1, -1, -1 ],
+#            [ 1, -1, -1, -1 ],
+#            [ 1,  1, -1, -1 ],
+#            [ 1,  1,  1, -1 ],
+#            [-1, -1,  1,  1 ],
+#            [-1, -1,  1,  1 ]]
+# reputation = [1, 1, 1, 1, 1, 1]
+# reports = np.array(reports)
+# oracle = Oracle(reports=reports, reputation=reputation)
+# oracle.consensus()
+
 class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
@@ -129,13 +140,13 @@ class Oracle(object):
         return v / np.sum(v)
 
     def catch(self, X):
-        """Forces continuous values into bins at 0, .5, and 1"""
-        if X < 0.5 * (1 - self.catch_tolerance):
-            return 0
-        elif X > 0.5 * (1 + self.catch_tolerance):
+        """Forces continuous values into bins at -1, 0, and 1"""
+        if X < 0 * (1 - self.catch_tolerance):
+            return -1
+        elif X > 0 * (1 + self.catch_tolerance):
             return 1
         else:
-            return .5
+            return 0
 
     def weighted_cov(self, reports_filled):
         """Weights are the number of coins people start with, so the aim of this
@@ -413,9 +424,9 @@ class Oracle(object):
             'original': self.reports.data,
             'filled': reports_filled.data,
             'agents': {
-                'old_rep': player_info['old_rep'][0],
-                'this_rep': player_info['this_rep'][0],
-                'smooth_rep': player_info['smooth_rep'][0],
+                'old_rep': player_info['old_rep'],
+                'this_rep': player_info['this_rep'],
+                'smooth_rep': player_info['smooth_rep'],
                 'na_row': na_mat.sum(axis=1).data.tolist(),
                 'participation_rows': participation_rows.data.tolist(),
                 'relative_part': na_bonus_reporters.data.tolist(),
