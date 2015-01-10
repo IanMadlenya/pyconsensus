@@ -61,8 +61,8 @@ elseif ARGS[1] == "sim"
     num_events = 10
     num_players = 15
 
-    honesty = convert(Array{Any,1}, rand(num_players))
-    players = copy(honesty)
+    honesty = rand(num_players)
+    players = fill("", num_players)
     players[honesty .>= 0.5] = "true"
     players[0.25 .< honesty .< 0.5] = "distort"
     players[honesty .<= 0.25] = "liar"
