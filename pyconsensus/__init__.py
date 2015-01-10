@@ -139,16 +139,27 @@ class Oracle(object):
             v += 1
         return v / np.sum(v)
 
+    # def catch(self, X):
+    #     """Forces continuous values into bins at 0, 0.5, and 1"""
+    #     center = 0.5
+    #     print X, " vs ", center, "+/-", center + self.catch_tolerance
+    #     if X < center - self.catch_tolerance:
+    #         return 0
+    #     elif X > center + self.catch_tolerance:
+    #         return 1
+    #     else:
+    #         return 0.5
+
     def catch(self, X):
         """Forces continuous values into bins at -1, 0, and 1"""
-        center = 0.5
-        print X, " vs ", center * (1 - self.catch_tolerance)
-        if X < center * (1 - self.catch_tolerance):
-            return 0
-        elif X > center * (1 + self.catch_tolerance):
+        center = 0
+        # print X, " vs ", center, "+/-", center + self.catch_tolerance
+        if X < center - self.catch_tolerance:
+            return -1
+        elif X > center + self.catch_tolerance:
             return 1
         else:
-            return 0.5
+            return 0
 
     def weighted_cov(self, reports_filled):
         """Weights are the number of coins people start with, so the aim of this
@@ -380,7 +391,6 @@ class Oracle(object):
 
         # .5 is obviously undesireable, this function travels from 0 to 1
         # with a minimum at .5
-        # certainty = abs(2 * (outcomes_raw - 0.5))
         certainty = []
         for i, adj in enumerate(outcome_adj):
             certainty.append(sum(player_info["smooth_rep"][reports_filled[:,i] == adj]))
@@ -388,6 +398,14 @@ class Oracle(object):
 
         # Grading Authors on a curve.
         consensus_reward = self.get_weight(certainty)
+
+        # print "raw:", outcomes_raw
+        # print "adj:", outcome_adj
+        # print "final:", outcome_final
+        # print "certainty:", certainty
+        # print "reward:", consensus_reward
+        # print "smooth_rep:", player_info["smooth_rep"]
+        # sys.exit(0)
 
         # How well did beliefs converge?
         avg_certainty = np.mean(certainty)
@@ -441,15 +459,15 @@ class Oracle(object):
             'events': {
                 'adj_first_loadings': adj_first_loadings.data.tolist(),
                 'outcomes_raw': outcomes_raw.data.tolist(),
-                'consensus_reward': consensus_reward.data.tolist(),
-                'certainty': certainty.data.tolist(),
+                'consensus_reward': consensus_reward,
+                'certainty': certainty,
                 'NAs Filled': na_mat.sum(axis=0).data.tolist(),
                 'participation_columns': participation_columns.data.tolist(),
                 'author_bonus': author_bonus.data.tolist(),
                 'outcome_final': outcome_final,
                 },
             'participation': 1 - percent_na,
-            'certainty': avg_certainty,
+            'avg_certainty': avg_certainty,
         }
 
 def main(argv=None):
@@ -490,6 +508,12 @@ def main(argv=None):
                                 [1, 1, 1, 0],
                                 [0, 0, 1, 1],
                                 [0, 0, 1, 1]])
+            reports = np.array([[1, 1, -1, -1],
+                                [1, -1, -1, -1],
+                                [1, 1, -1, -1],
+                                [1, 1, 1, -1],
+                                [-1, -1, 1, 1],
+                                [-1, -1, 1, 1]])
             # oracle = Oracle(reports=reports, reputation=reputation)
             oracle = Oracle(reports=reports)
             pprint(oracle.consensus())
