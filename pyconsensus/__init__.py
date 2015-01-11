@@ -37,6 +37,8 @@ import json
 from pprint import pprint
 import numpy as np
 import pandas as pd
+from scipy import signal
+from sklearn.decomposition import FastICA, PCA
 from weightedstats import weighted_median
 from six.moves import xrange as range
 
@@ -206,12 +208,32 @@ class Oracle(object):
         The reports matrix has reporters as rows and events as columns.
 
         """
+        global covariance_matrix
+        global mean_deviation
+
         covariance_matrix, mean_deviation = self.weighted_cov(reports_filled)
+
         U = np.linalg.svd(covariance_matrix)[0]
         first_loading = U.T[0]
         first_score = np.dot(mean_deviation, U).T[0]
 
         SVD = np.linalg.svd(covariance_matrix)
+
+        # H is the same as U but is not normalized by length
+        H = PCA().fit_transform(covariance_matrix)
+
+        # Normalize loading by Euclidean distance
+        H_first_loading = H[:,0] / np.sqrt(np.sum(H[:,0]**2))
+
+        assert((first_loading - H_first_loading < 1e-12).all())
+
+        ica = FastICA(n_components=len(covariance_matrix))
+        S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
+        A_ = ica.mixing_                            # Estimated mixing matrix
+
+        S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
+
+        # import pdb; pdb.set_trace()
 
         if self.verbose:
             print('=== FROM SINGULAR VALUE DECOMPOSITION OF WEIGHTED COVARIANCE MATRIX ===')

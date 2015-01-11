@@ -6,8 +6,12 @@ using MultivariateStats
 
 @pyimport pyconsensus
 
+# conflating NaNs (no answer) with 0's (indeterminates) in pyconsensus/serpent??
+
+extension = (length(ARGS) > 0) ? ARGS[1] : "sim"
+
 # Default test case
-if ARGS[1] == "default"
+if extension == "default"
     # true=1, false=-1, indeterminate=0.5, no response=NaN
     reports = [  1  1 -1 NaN ;
                  1 -1 -1  -1 ;
@@ -19,7 +23,7 @@ if ARGS[1] == "default"
     reputation = PyArray(PyObject(reputation))
 
 # Random test case
-elseif ARGS[1] == "random"
+elseif extension == "random"
     num_reports = 100
     num_events = 100
     reports = convert(Array{Float64,2}, rand(-1:2:1, num_reports, num_events))
@@ -28,7 +32,7 @@ elseif ARGS[1] == "random"
     reputation = rand(1:100, num_reports)
     # display(reputation)
 
-elseif ARGS[1] == "example"
+elseif extension == "example"
     # Taken from Truthcoin/lib/ConsensusMechanism.r
     #           C1.1 C2.1 C3.0 C4.0
     # True         1    1    0    0
@@ -54,7 +58,7 @@ elseif ARGS[1] == "example"
 
     reputation = [1; 1; 1; 1; 1; 1]
 
-elseif ARGS[1] == "sim"
+elseif extension == "sim"
     # 1. Generate artificial "true, distort (semi-true), liar" list
     COLLUDE = 0.6     # 0.6 = 60% chance that liars' lies will be identical
     DISTORT = 0.25    # 0.25 = 25% chance of random incorrect answer
@@ -109,7 +113,7 @@ old_rep = A["agents"]["old_rep"]        # previous reputation
 this_rep = A["agents"]["this_rep"]      # from this round
 smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
 
-if ARGS[1] == "sim"
+if extension == "sim"
     df2 = convert(DataFrame, [players this_rep smooth_rep])
     colnames2 = names(df2)
     colnames2[1] = "player"
