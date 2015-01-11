@@ -203,8 +203,14 @@ class Oracle(object):
         return covariance_matrix, mean_deviation
 
     def weighted_prin_comp(self, reports_filled):
-        """Principal Component Analysis (PCA) on the reports matrix.
 
+        # return first_loading, first_score
+        return first_loading, row_reward_weighted
+
+    def get_reward_weights(self, reports_filled):
+        """Calculates new reputations using a weighted Principal Component
+        Analysis (PCA).
+        
         The reports matrix has reporters as rows and events as columns.
 
         """
@@ -233,9 +239,12 @@ class Oracle(object):
         ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
         adj_prin_comp = set1 if ref_ind <= 0 else set2
 
-        ica = FastICA(n_components=len(covariance_matrix), whiten=True)
+        ica = FastICA(n_components=len(covariance_matrix), whiten=True, random_state=0)
         S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
         A_ = ica.mixing_                            # Estimated mixing matrix
+
+        print U
+        print S_
 
         S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
         S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
@@ -252,7 +261,8 @@ class Oracle(object):
 
         row_reward_weighted = self.reputation
         if max(abs(S_adj_prin_comp)) != 0:
-            row_reward_weighted = self.get_weight((S_adj_prin_comp + adj_prin_comp)*0.5 * (self.reputation / np.mean(self.reputation)).T)
+            row_reward_weighted = self.get_weight((S_adj_prin_comp + adj_prin_comp)*0.5 *\
+                                                  (self.reputation / np.mean(self.reputation)).T)
 
         # print row_reward_weighted
         # import pdb; pdb.set_trace()
@@ -269,15 +279,6 @@ class Oracle(object):
             print('=== FIRST SCORES ===')
             print(first_score)
 
-        # return first_loading, first_score
-        return first_loading, row_reward_weighted
-
-    def get_reward_weights(self, reports_filled):
-        """Calculates new reputations using a weighted
-        Principal Component Analysis (PCA).
-
-        """
-        first_loading, row_reward_weighted = self.weighted_prin_comp(reports_filled)
         smooth_rep = self.alpha*row_reward_weighted + (1-self.alpha)*self.reputation.T
         return {
             "first_loading": first_loading,
@@ -518,7 +519,8 @@ def main(argv=None):
                                 [-1, -1, 1, 1]])
             # oracle = Oracle(reports=reports, reputation=reputation)
             oracle = Oracle(reports=reports)
-            pprint(oracle.consensus())
+            A = oracle.consensus()
+            print A["agents"]["this_rep"]
         elif opt in ('-m', '--missing'):
             # old: true=1, false=0, indeterminate=0.5, no response=-1
             reports = np.array([[  1,  1,  0, -1],
@@ -549,7 +551,8 @@ def main(argv=None):
                                 [     -1, -1,  1,      1]])
             reputation = [2, 10, 4, 2, 7, 1]
             oracle = Oracle(reports=reports, reputation=reputation)
-            pprint(oracle.consensus())
+            A = oracle.consensus()
+            print A["agents"]["this_rep"]
         elif opt in ('-t', '--test'):
             reports = np.array([[ 1, 0.5,  0,  0],
                                 [ 1, 0.5,  0,  0],
