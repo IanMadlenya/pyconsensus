@@ -37,8 +37,14 @@ import json
 from pprint import pprint
 import numpy as np
 import pandas as pd
+
 from scipy import signal
 from sklearn.decomposition import FastICA, PCA
+import mne
+from mne.fiff import Raw
+from mne.preprocessing.ica import ICA, run_ica
+from mne.datasets import sample
+
 from weightedstats import weighted_median
 from six.moves import xrange as range
 
@@ -55,6 +61,8 @@ pd.set_option("display.width", 1000)
 np.set_printoptions(linewidth=500,
                     suppress=True,
                     formatter={"float": "{: 0.6f}".format})
+
+mne.utils.set_log_level('WARNING')
 
 # reports = [[ 1,  1, -1, -1 ],
 #            [ 1, -1, -1, -1 ],
@@ -227,11 +235,24 @@ class Oracle(object):
 
         assert((first_loading - H_first_loading < 1e-12).all())
 
-        ica = FastICA(n_components=len(covariance_matrix))
-        S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
-        A_ = ica.mixing_                            # Estimated mixing matrix
+        # ica = FastICA(n_components=len(covariance_matrix))
+        # S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
+        # A_ = ica.mixing_                            # Estimated mixing matrix
 
-        S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
+        # S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
+        # S_first_score = np.dot(mean_deviation, S_first_loading)
+
+        start, stop = None, None
+
+        # Set high rejection parameters to avoid computing ICA on too artifacts segments
+        reject = dict(mag=4e-12, grad=4000e-13)
+
+        ica = ICA(n_components=0.90, n_pca_components=None, max_pca_components=None,
+                  noise_cov=None, random_state=0)
+
+        # decompose sources for raw data
+        ica.decompose_raw(raw, start=start, stop=stop, picks=picks,
+                          decim=2, reject=reject)
 
         # import pdb; pdb.set_trace()
 
