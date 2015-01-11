@@ -34,6 +34,7 @@ import sys
 import os
 import getopt
 import json
+import warnings
 from pprint import pprint
 import numpy as np
 import pandas as pd
@@ -243,33 +244,48 @@ class Oracle(object):
                       whiten=True,
                       random_state=0,
                       max_iter=1002)
-        S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
-        A_ = ica.mixing_                            # Estimated mixing matrix
-
+        
         print "PCA loadings:"
         print U
-        print "ICA loadings:"
-        print S_
 
-        S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
-        S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
+        with warnings.catch_warnings(record=True) as w:
+            try:
+                S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
+                if len(w):
+                    net_adj_prin_comp = adj_prin_comp
+                    ica_convergence = False
+                else:
+                    print "ICA loadings:"
+                    print S_
 
-        S_set1 = S_first_score + np.abs(np.min(S_first_score))
-        S_set2 = S_first_score - np.max(S_first_score)
+                    A_ = ica.mixing_ # Estimated mixing matrix
+                    
+                    S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
+                    S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
 
-        S_old = np.dot(self.reputation.T, reports_filled)
-        S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
-        S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
+                    S_set1 = S_first_score + np.abs(np.min(S_first_score))
+                    S_set2 = S_first_score - np.max(S_first_score)
 
-        S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
-        S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
+                    S_old = np.dot(self.reputation.T, reports_filled)
+                    S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
+                    S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
 
-        print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+                    S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
+                    S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
+
+                    print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+
+                    net_adj_prin_comp = (S_adj_prin_comp + adj_prin_comp)*0.5
+                    ica_convergence = True
+            except:
+                net_adj_prin_comp = adj_prin_comp
+                ica_convergence = False
 
         row_reward_weighted = self.reputation
-        if max(abs(S_adj_prin_comp)) != 0:
-            row_reward_weighted = self.get_weight((S_adj_prin_comp + adj_prin_comp)*0.5 *\
-                                                  (self.reputation / np.mean(self.reputation)).T)
+        if max(abs(net_adj_prin_comp)) != 0:
+            row_reward_weighted = self.get_weight(net_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+
+        # import pdb; pdb.set_trace()
 
         if self.verbose:
             print('=== FROM SINGULAR VALUE DECOMPOSITION OF WEIGHTED COVARIANCE MATRIX ===')
@@ -289,6 +305,7 @@ class Oracle(object):
             "old_rep": self.reputation.T,
             "this_rep": row_reward_weighted,
             "smooth_rep": smooth_rep,
+            "ica_convergence": ica_convergence,
         }
 
     def fill_na(self, reports, scaled_index):
@@ -467,6 +484,7 @@ class Oracle(object):
                 },
             'participation': 1 - percent_na,
             'avg_certainty': avg_certainty,
+            'ica_convergence': player_info['ica_convergence'],
         }
 
 def main(argv=None):
@@ -501,43 +519,43 @@ def main(argv=None):
             #                     [  1, -1,  1,  1],
             #                     [ -1, -1,  1,  1]])
             # reputation = [2, 10, 4, 2, 7, 1]
-            reports = np.array([[1, 1, 0, 0],
-                                [1, 0, 0, 0],
-                                [1, 1, 0, 0],
-                                [1, 1, 1, 0],
-                                [0, 0, 1, 1],
-                                [0, 0, 1, 1]])
-            reports = np.array([[1, 1, -1, -1],
-                                [1, -1, -1, -1],
-                                [1, 1, -1, -1],
-                                [1, 1, 1, -1],
-                                [-1, -1, 1, 1],
-                                [-1, -1, 1, 1]])
+            # reports = np.array([[1, 1, 0, 0],
+            #                     [1, 0, 0, 0],
+            #                     [1, 1, 0, 0],
+            #                     [1, 1, 1, 0],
+            #                     [0, 0, 1, 1],
+            #                     [0, 0, 1, 1]])
+            reports = np.array([[  1,  1, -1, -1],
+                                [  1, -1, -1, -1],
+                                [  1,  1, -1, -1],
+                                [  1,  1,  1, -1],
+                                [ -1, -1,  1,  1],
+                                [ -1, -1,  1,  1]])
             # oracle = Oracle(reports=reports, reputation=reputation)
             oracle = Oracle(reports=reports)
             A = oracle.consensus()
             print A["agents"]["this_rep"]
         elif opt in ('-m', '--missing'):
-            # old: true=1, false=0, indeterminate=0.5, no response=-1
-            reports = np.array([[  1,  1,  0, -1],
-                                [  1,  0,  0,  0],
-                                [  1,  1,  0,  0],
-                                [  1,  1,  1,  0],
-                                [ -1,  0,  1,  1],
-                                [  0,  0,  1,  1]])
-            reports = np.array([[      1,  1,  0, np.nan],
-                                [      1,  0,  0,      0],
-                                [      1,  1,  0,      0],
-                                [      1,  1,  1,      0],
-                                [ np.nan,  0,  1,      1],
-                                [      0,  0,  1,      1]])
-            # new: true=1, false=-1, indeterminate=0.5, no response=0
-            reports = np.array([[  1,  1, -1,  0],
-                                [  1, -1, -1, -1],
-                                [  1,  1, -1, -1],
-                                [  1,  1,  1, -1],
-                                [  0, -1,  1,  1],
-                                [ -1, -1,  1,  1]])
+            # # old: true=1, false=0, indeterminate=0.5, no response=-1
+            # reports = np.array([[  1,  1,  0, -1],
+            #                     [  1,  0,  0,  0],
+            #                     [  1,  1,  0,  0],
+            #                     [  1,  1,  1,  0],
+            #                     [ -1,  0,  1,  1],
+            #                     [  0,  0,  1,  1]])
+            # reports = np.array([[      1,  1,  0, np.nan],
+            #                     [      1,  0,  0,      0],
+            #                     [      1,  1,  0,      0],
+            #                     [      1,  1,  1,      0],
+            #                     [ np.nan,  0,  1,      1],
+            #                     [      0,  0,  1,      1]])
+            # # new: true=1, false=-1, indeterminate=0.5, no response=0
+            # reports = np.array([[  1,  1, -1,  0],
+            #                     [  1, -1, -1, -1],
+            #                     [  1,  1, -1, -1],
+            #                     [  1,  1,  1, -1],
+            #                     [  0, -1,  1,  1],
+            #                     [ -1, -1,  1,  1]])
             # new: true=1, false=-1, indeterminate=0.5, no response=np.nan
             reports = np.array([[      1,  1, -1, np.nan],
                                 [      1, -1, -1,     -1],

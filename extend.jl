@@ -109,6 +109,8 @@ A = oracle[:consensus]()
 # display(convert(DataFrame, A["events"]))
 # println()
 
+println(string("ICA convergence: ", A["ica_convergence"]))
+
 old_rep = A["agents"]["old_rep"]        # previous reputation
 this_rep = A["agents"]["this_rep"]      # from this round
 smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
