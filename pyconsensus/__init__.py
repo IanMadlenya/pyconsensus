@@ -37,14 +37,8 @@ import json
 from pprint import pprint
 import numpy as np
 import pandas as pd
-
 from scipy import signal
 from sklearn.decomposition import FastICA, PCA
-import mne
-from mne.fiff import Raw
-from mne.preprocessing.ica import ICA, run_ica
-from mne.datasets import sample
-
 from weightedstats import weighted_median
 from six.moves import xrange as range
 
@@ -61,8 +55,6 @@ pd.set_option("display.width", 1000)
 np.set_printoptions(linewidth=500,
                     suppress=True,
                     formatter={"float": "{: 0.6f}".format})
-
-mne.utils.set_log_level('WARNING')
 
 # reports = [[ 1,  1, -1, -1 ],
 #            [ 1, -1, -1, -1 ],
@@ -216,9 +208,6 @@ class Oracle(object):
         The reports matrix has reporters as rows and events as columns.
 
         """
-        global covariance_matrix
-        global mean_deviation
-
         covariance_matrix, mean_deviation = self.weighted_cov(reports_filled)
 
         U = np.linalg.svd(covariance_matrix)[0]
@@ -235,30 +224,37 @@ class Oracle(object):
 
         assert((first_loading - H_first_loading < 1e-12).all())
 
-        ica = FastICA(n_components=len(covariance_matrix), whiten=False)
+        set1 = first_score + np.abs(np.min(first_score))
+        set2 = first_score - np.max(first_score)
+        old = np.dot(self.reputation.T, reports_filled)
+        new1 = np.dot(self.get_weight(set1), reports_filled)
+        new2 = np.dot(self.get_weight(set2), reports_filled)
+
+        ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+        adj_prin_comp = set1 if ref_ind <= 0 else set2
+
+        ica = FastICA(n_components=len(covariance_matrix), whiten=True)
         S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
         A_ = ica.mixing_                            # Estimated mixing matrix
 
         S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
         S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
 
-        set1 = S_first_score + np.abs(np.min(S_first_score))
-        set2 = S_first_score - np.max(S_first_score)
+        S_set1 = S_first_score + np.abs(np.min(S_first_score))
+        S_set2 = S_first_score - np.max(S_first_score)
 
-        old = np.dot(self.reputation.T, reports_filled)
-        new1 = np.dot(self.get_weight(set1), reports_filled)
-        new2 = np.dot(self.get_weight(set2), reports_filled)
+        S_old = np.dot(self.reputation.T, reports_filled)
+        S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
+        S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
 
-        ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-        if ref_ind <= 0:
-            adj_prin_comp = set1
-        if ref_ind > 0:
-            adj_prin_comp = set2
+        S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
+        S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
 
         row_reward_weighted = self.reputation
-        if not (np.max(np.abs(adj_prin_comp)) != 0).all():
-            row_reward_weighted = self.get_weight(adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+        if max(abs(S_adj_prin_comp)) != 0:
+            row_reward_weighted = self.get_weight((S_adj_prin_comp + adj_prin_comp)*0.5 * (self.reputation / np.mean(self.reputation)).T)
 
+        # print row_reward_weighted
         # import pdb; pdb.set_trace()
 
         if self.verbose:
@@ -272,62 +268,17 @@ class Oracle(object):
 
             print('=== FIRST SCORES ===')
             print(first_score)
-            # import pdb; pdb.set_trace()
-            # sys.exit(0)
 
-        return first_loading, first_score
+        # return first_loading, first_score
+        return first_loading, row_reward_weighted
 
     def get_reward_weights(self, reports_filled):
         """Calculates new reputations using a weighted
         Principal Component Analysis (PCA).
 
         """
-        results = self.weighted_prin_comp(reports_filled)
-        
-        # The first loading (largest eigenvector) is designed to indicate
-        # which Events were more 'agreed-upon' than others.
-        first_loading = results[0]
-        
-        # The scores show loadings on consensus (to what extent does
-        # this observation represent consensus?)
-        first_score = results[1]
-
-        # import pdb; pdb.set_trace()
-
-        # Which of the two possible 'new' reputation vectors had more opinion in common
-        # with the original 'old' reputation.
-        set1 = first_score + abs(min(first_score))
-        set2 = first_score - max(first_score)
-        # old = np.dot(self.rep_coins.T, reports_filled)
-        old = np.dot(self.reputation.T, reports_filled)
-        new1 = np.dot(self.get_weight(set1), reports_filled)
-        new2 = np.dot(self.get_weight(set2), reports_filled)
-
-        # Difference in sum of squared errors. If > 0, then new1 had higher
-        # errors (use new2); conversely if < 0, then use new1.
-        ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-        if ref_ind <= 0:
-            adj_prin_comp = set1
-        if ref_ind > 0:
-            adj_prin_comp = set2
-
-        import pdb; pdb.set_trace()
-      
-        # (set this to uniform if you want a passive diffusion toward equality
-        # when people cooperate [not sure why you would]). Instead diffuses towards
-        # previous reputation (Smoothing does this anyway).
-        row_reward_weighted = self.reputation
-        if max(abs(adj_prin_comp)) != 0:
-            # Overwrite the inital declaration IFF there wasn't perfect consensus.
-            row_reward_weighted = self.get_weight(adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
-
-        #note: reputation/mean(reputation) is a correction ensuring Reputation is additive. Therefore, nothing can be gained by splitting/combining Reputation into single/multiple accounts.
-              
-        # Freshly-Calculated Reward (Reputation) - Exponential Smoothing
-        # New Reward: row_reward_weighted
-        # Old Reward: reputation
+        first_loading, row_reward_weighted = self.weighted_prin_comp(reports_filled)
         smooth_rep = self.alpha*row_reward_weighted + (1-self.alpha)*self.reputation.T
-
         return {
             "first_loading": first_loading,
             "old_rep": self.reputation.T,
