@@ -228,7 +228,7 @@ class Oracle(object):
         # Normalize loading by Euclidean distance
         H_first_loading = H[:,0] / np.sqrt(np.sum(H[:,0]**2))
 
-        assert((first_loading - H_first_loading < 1e-12).all())
+        # assert((first_loading - H_first_loading < 1e-12).all())
 
         set1 = first_score + np.abs(np.min(first_score))
         set2 = first_score - np.max(first_score)
@@ -239,11 +239,16 @@ class Oracle(object):
         ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
         adj_prin_comp = set1 if ref_ind <= 0 else set2
 
-        ica = FastICA(n_components=len(covariance_matrix), whiten=True, random_state=0)
+        ica = FastICA(n_components=len(covariance_matrix),
+                      whiten=True,
+                      random_state=0,
+                      max_iter=1002)
         S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
         A_ = ica.mixing_                            # Estimated mixing matrix
 
+        print "PCA loadings:"
         print U
+        print "ICA loadings:"
         print S_
 
         S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
@@ -259,13 +264,12 @@ class Oracle(object):
         S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
         S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
 
+        print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+
         row_reward_weighted = self.reputation
         if max(abs(S_adj_prin_comp)) != 0:
             row_reward_weighted = self.get_weight((S_adj_prin_comp + adj_prin_comp)*0.5 *\
                                                   (self.reputation / np.mean(self.reputation)).T)
-
-        # print row_reward_weighted
-        # import pdb; pdb.set_trace()
 
         if self.verbose:
             print('=== FROM SINGULAR VALUE DECOMPOSITION OF WEIGHTED COVARIANCE MATRIX ===')
@@ -401,14 +405,6 @@ class Oracle(object):
 
         # Grading Authors on a curve.
         consensus_reward = self.get_weight(certainty)
-
-        # print "raw:", outcomes_raw
-        # print "adj:", outcome_adj
-        # print "final:", outcome_final
-        # print "certainty:", certainty
-        # print "reward:", consensus_reward
-        # print "smooth_rep:", player_info["smooth_rep"]
-        # sys.exit(0)
 
         # How well did beliefs converge?
         avg_certainty = np.mean(certainty)
