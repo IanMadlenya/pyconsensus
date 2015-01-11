@@ -235,24 +235,29 @@ class Oracle(object):
 
         assert((first_loading - H_first_loading < 1e-12).all())
 
-        # ica = FastICA(n_components=len(covariance_matrix))
-        # S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
-        # A_ = ica.mixing_                            # Estimated mixing matrix
+        ica = FastICA(n_components=len(covariance_matrix), whiten=False)
+        S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
+        A_ = ica.mixing_                            # Estimated mixing matrix
 
-        # S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
-        # S_first_score = np.dot(mean_deviation, S_first_loading)
+        S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
+        S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
 
-        start, stop = None, None
+        set1 = S_first_score + np.abs(np.min(S_first_score))
+        set2 = S_first_score - np.max(S_first_score)
 
-        # Set high rejection parameters to avoid computing ICA on too artifacts segments
-        reject = dict(mag=4e-12, grad=4000e-13)
+        old = np.dot(self.reputation.T, reports_filled)
+        new1 = np.dot(self.get_weight(set1), reports_filled)
+        new2 = np.dot(self.get_weight(set2), reports_filled)
 
-        ica = ICA(n_components=0.90, n_pca_components=None, max_pca_components=None,
-                  noise_cov=None, random_state=0)
+        ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+        if ref_ind <= 0:
+            adj_prin_comp = set1
+        if ref_ind > 0:
+            adj_prin_comp = set2
 
-        # decompose sources for raw data
-        ica.decompose_raw(raw, start=start, stop=stop, picks=picks,
-                          decim=2, reject=reject)
+        row_reward_weighted = self.reputation
+        if not (np.max(np.abs(adj_prin_comp)) != 0).all():
+            row_reward_weighted = self.get_weight(adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
 
         # import pdb; pdb.set_trace()
 
@@ -293,7 +298,8 @@ class Oracle(object):
         # with the original 'old' reputation.
         set1 = first_score + abs(min(first_score))
         set2 = first_score - max(first_score)
-        old = np.dot(self.rep_coins.T, reports_filled)
+        # old = np.dot(self.rep_coins.T, reports_filled)
+        old = np.dot(self.reputation.T, reports_filled)
         new1 = np.dot(self.get_weight(set1), reports_filled)
         new2 = np.dot(self.get_weight(set2), reports_filled)
 
@@ -304,6 +310,8 @@ class Oracle(object):
             adj_prin_comp = set1
         if ref_ind > 0:
             adj_prin_comp = set2
+
+        import pdb; pdb.set_trace()
       
         # (set this to uniform if you want a passive diffusion toward equality
         # when people cooperate [not sure why you would]). Instead diffuses towards
