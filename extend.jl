@@ -10,31 +10,32 @@ extension = (length(ARGS) > 0) ? ARGS[1] : "sim"
 
 function oracle_results(A)
     println(string("ICA convergence: ", A["ica_convergence"]))
+    if A["ica_convergence"]
+        old_rep = A["agents"]["old_rep"]        # previous reputation
+        this_rep = A["agents"]["this_rep"]      # from this round
+        smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
 
-    old_rep = A["agents"]["old_rep"]        # previous reputation
-    this_rep = A["agents"]["this_rep"]      # from this round
-    smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
+        if extension == "sim"
+            vtrue = this_rep - this_rep[first(find(players .== "true"))]
+            df2 = convert(DataFrame, [players vtrue this_rep smooth_rep])
+            colnames2 = names(df2)
+            colnames2[1] = "player"
+        else
+            df2 = convert(DataFrame, [old_rep this_rep smooth_rep])
+            colnames2 = names(df2)
+            colnames2[1] = "old_rep"
+        end
 
-    if extension == "sim"
-        vtrue = this_rep - this_rep[first(find(players .== "true"))]
-        df2 = convert(DataFrame, [players vtrue this_rep smooth_rep])
-        colnames2 = names(df2)
-        colnames2[1] = "player"
-    else
-        df2 = convert(DataFrame, [old_rep this_rep smooth_rep])
-        colnames2 = names(df2)
-        colnames2[1] = "old_rep"
+        colnames2[2] = "vs true"
+        colnames2[3] = "this_rep"
+        colnames2[4] = "smooth_rep"
+        names!(df2, colnames2)
+
+        display(df2)
+        println()
+
+        vtrue
     end
-
-    colnames2[2] = "vs true"
-    colnames2[3] = "this_rep"
-    colnames2[4] = "smooth_rep"
-    names!(df2, colnames2)
-
-    display(df2)
-    println()
-
-    vtrue
 end
 
 # Default test case
@@ -146,18 +147,20 @@ elseif extension == "sim"
 end
 
 println("With ICA")
-
 oracle = pyconsensus.Oracle(reports=reports, reputation=reputation, run_ica=true)
 A = oracle[:consensus]()
 # display(convert(DataFrame, A["agents"]))
 # display(convert(DataFrame, A["events"]))
 # println()
-
 vtrue = oracle_results(A)
+if vtrue != nothing
+    println(string("vs true sum: ", sum(vtrue)))
+end
 
 println("Without ICA")
-
 oracle = pyconsensus.Oracle(reports=reports, reputation=reputation, run_ica=false)
 A = oracle[:consensus]()
-
 vtrue = oracle_results(A)
+if vtrue != nothing
+    println(string("vs true sum: ", sum(vtrue)))
+end

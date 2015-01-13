@@ -267,7 +267,8 @@ class Oracle(object):
                         S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
                         S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
 
-                        print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+                        if self.verbose:
+                            print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
 
                         net_adj_prin_comp = (S_adj_prin_comp + adj_prin_comp)*0.5
                         ica_convergence = True
