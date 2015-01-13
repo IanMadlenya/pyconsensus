@@ -71,7 +71,8 @@ np.set_printoptions(linewidth=500,
 class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
-                 catch_tolerance=0.1, max_row=5000, alpha=0.1, verbose=False):
+                 catch_tolerance=0.1, max_row=5000, alpha=0.1, verbose=False,
+                 run_ica=False):
         """
         Args:
           reports (list-of-lists): reports matrix; rows = reporters, columns = Events.
@@ -90,24 +91,18 @@ class Oracle(object):
         self.alpha = alpha
         self.verbose = verbose
         self.num_reports = len(reports)
+        self.run_ica = run_ica
         if reputation is None:
             self.weighted = False
             self.total_rep = self.num_reports
             self.reputation = np.array([1 / float(self.num_reports)] * self.num_reports)
-            # print "rep:", self.reputation
             self.rep_coins = (np.copy(self.reputation) * 10**6).astype(int)
-            # print "repcoins:", self.rep_coins
             self.total_rep_coins = sum(self.rep_coins)
         else:
             self.weighted = True
             self.total_rep = sum(np.array(reputation).ravel())
-            # print "input rep:", reputation
             self.reputation = np.array([i / float(self.total_rep) for i in reputation])
-            # self.reputation = reputation
-            # print "rep:      ", self.reputation
             self.rep_coins = (np.abs(np.copy(reputation)) * 10**6).astype(int)
-            # self.rep_coins = reputation
-            # print "repcoins: ", self.rep_coins
             self.total_rep_coins = sum(self.rep_coins)
 
     def rescale(self):
@@ -192,8 +187,6 @@ class Oracle(object):
 
         # Compute the unbiased weighted population covariance
         # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
-        # covariance_matrix = 1/float(np.sum(self.rep_coins)-1) * np.ma.multiply(mean_deviation.T, self.rep_coins).dot(mean_deviation)
-        # ssq = np.sum(self.total_rep_coins**2)
         ssq = np.sum(self.reputation**2)
         covariance_matrix = 1/float(1 - ssq) * np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation)
 
@@ -229,8 +222,6 @@ class Oracle(object):
         # Normalize loading by Euclidean distance
         H_first_loading = H[:,0] / np.sqrt(np.sum(H[:,0]**2))
 
-        # assert((first_loading - H_first_loading < 1e-12).all())
-
         set1 = first_score + np.abs(np.min(first_score))
         set2 = first_score - np.max(first_score)
         old = np.dot(self.reputation.T, reports_filled)
@@ -239,53 +230,57 @@ class Oracle(object):
 
         ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
         adj_prin_comp = set1 if ref_ind <= 0 else set2
-
-        ica = FastICA(n_components=len(covariance_matrix),
-                      whiten=True,
-                      random_state=0,
-                      max_iter=1002)
         
-        print "PCA loadings:"
-        print U
+        if self.verbose:
+            print "PCA loadings:"
+            print U
 
-        with warnings.catch_warnings(record=True) as w:
-            try:
-                S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
-                if len(w):
+        if self.run_ica:
+            ica = FastICA(n_components=len(covariance_matrix),
+                          whiten=True,
+                          random_state=0,
+                          max_iter=1002)
+
+            with warnings.catch_warnings(record=True) as w:
+                try:
+                    S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
+                    if len(w):
+                        net_adj_prin_comp = adj_prin_comp
+                        ica_convergence = False
+                    else:
+                        if self.verbose:
+                            print "ICA loadings:"
+                            print S_
+
+                        A_ = ica.mixing_ # Estimated mixing matrix
+                        
+                        S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
+                        S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
+
+                        S_set1 = S_first_score + np.abs(np.min(S_first_score))
+                        S_set2 = S_first_score - np.max(S_first_score)
+
+                        S_old = np.dot(self.reputation.T, reports_filled)
+                        S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
+                        S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
+
+                        S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
+                        S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
+
+                        print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+
+                        net_adj_prin_comp = (S_adj_prin_comp + adj_prin_comp)*0.5
+                        ica_convergence = True
+                except:
                     net_adj_prin_comp = adj_prin_comp
                     ica_convergence = False
-                else:
-                    print "ICA loadings:"
-                    print S_
-
-                    A_ = ica.mixing_ # Estimated mixing matrix
-                    
-                    S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
-                    S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
-
-                    S_set1 = S_first_score + np.abs(np.min(S_first_score))
-                    S_set2 = S_first_score - np.max(S_first_score)
-
-                    S_old = np.dot(self.reputation.T, reports_filled)
-                    S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
-                    S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
-
-                    S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
-                    S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
-
-                    print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
-
-                    net_adj_prin_comp = (S_adj_prin_comp + adj_prin_comp)*0.5
-                    ica_convergence = True
-            except:
-                net_adj_prin_comp = adj_prin_comp
-                ica_convergence = False
+        else:
+            net_adj_prin_comp = adj_prin_comp
+            ica_convergence = False
 
         row_reward_weighted = self.reputation
         if max(abs(net_adj_prin_comp)) != 0:
             row_reward_weighted = self.get_weight(net_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
-
-        # import pdb; pdb.set_trace()
 
         if self.verbose:
             print('=== FROM SINGULAR VALUE DECOMPOSITION OF WEIGHTED COVARIANCE MATRIX ===')

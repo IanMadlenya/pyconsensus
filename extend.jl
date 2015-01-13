@@ -6,9 +6,36 @@ using MultivariateStats
 
 @pyimport pyconsensus
 
-# conflating NaNs (no answer) with 0's (indeterminates) in pyconsensus/serpent??
-
 extension = (length(ARGS) > 0) ? ARGS[1] : "sim"
+
+function oracle_results(A)
+    println(string("ICA convergence: ", A["ica_convergence"]))
+
+    old_rep = A["agents"]["old_rep"]        # previous reputation
+    this_rep = A["agents"]["this_rep"]      # from this round
+    smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
+
+    if extension == "sim"
+        vtrue = this_rep - this_rep[first(find(players .== "true"))]
+        df2 = convert(DataFrame, [players vtrue this_rep smooth_rep])
+        colnames2 = names(df2)
+        colnames2[1] = "player"
+    else
+        df2 = convert(DataFrame, [old_rep this_rep smooth_rep])
+        colnames2 = names(df2)
+        colnames2[1] = "old_rep"
+    end
+
+    colnames2[2] = "vs true"
+    colnames2[3] = "this_rep"
+    colnames2[4] = "smooth_rep"
+    names!(df2, colnames2)
+
+    display(df2)
+    println()
+
+    vtrue
+end
 
 # Default test case
 if extension == "default"
@@ -28,9 +55,7 @@ elseif extension == "random"
     num_events = 100
     reports = convert(Array{Float64,2}, rand(-1:2:1, num_reports, num_events))
     reports[reports .== 0] = NaN
-    # display(reports)
     reputation = rand(1:100, num_reports)
-    # display(reputation)
 
 elseif extension == "example"
     # Taken from Truthcoin/lib/ConsensusMechanism.r
@@ -60,10 +85,10 @@ elseif extension == "example"
 
 elseif extension == "sim"
     # 1. Generate artificial "true, distort (semi-true), liar" list
-    COLLUDE = 0.6     # 0.6 = 60% chance that liars' lies will be identical
+    COLLUDE = 0.5     # 0.6 = 60% chance that liars' lies will be identical
     DISTORT = 0.25    # 0.25 = 25% chance of random incorrect answer
     num_events = 10
-    num_players = 15
+    num_players = 30
 
     honesty = rand(num_players)
     players = fill("", num_players)
@@ -91,9 +116,26 @@ elseif extension == "sim"
     randomized = convert(Array{Float64,2}, rand(-1:1, num_distorts, num_events))
     reports[distorts,:] = correct.*~distmask + randomized.*distmask
 
-    # Liar: report incorrect answers at random (but with a high chance
+    # Liar: report answers at random (but with a high chance
     #       of being equal to other liars' answers)
     reports[liars,:] = convert(Array{Float64,2}, rand(-1:1, num_liars, num_events))
+
+    # Collusion
+    for i in 1:num_liars-1
+        # Pairs
+        diceroll = first(rand(1))
+        if diceroll < COLLUDE
+            # println("pair")
+            reports[liars[i],:] = reports[liars[i+1],:]
+        end
+        # Triples
+        if i + 2 < num_liars
+            # println("triple")
+            if diceroll < COLLUDE^2
+                reports[liars[i],:] = reports[liars[i+2],:]
+            end
+        end
+    end
 
     # 3. Optimize RMSD between actual this_rep dispensed, and an ideal this_rep
     display([players reports])
@@ -103,31 +145,19 @@ elseif extension == "sim"
 
 end
 
-oracle = pyconsensus.Oracle(reports=reports, reputation=reputation)
+println("With ICA")
+
+oracle = pyconsensus.Oracle(reports=reports, reputation=reputation, run_ica=true)
 A = oracle[:consensus]()
 # display(convert(DataFrame, A["agents"]))
 # display(convert(DataFrame, A["events"]))
 # println()
 
-println(string("ICA convergence: ", A["ica_convergence"]))
+vtrue = oracle_results(A)
 
-old_rep = A["agents"]["old_rep"]        # previous reputation
-this_rep = A["agents"]["this_rep"]      # from this round
-smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
+println("Without ICA")
 
-if extension == "sim"
-    df2 = convert(DataFrame, [players this_rep smooth_rep])
-    colnames2 = names(df2)
-    colnames2[1] = "player"
-else
-    df2 = convert(DataFrame, [old_rep this_rep smooth_rep])
-    colnames2 = names(df2)
-    colnames2[1] = "old_rep"
-end
+oracle = pyconsensus.Oracle(reports=reports, reputation=reputation, run_ica=false)
+A = oracle[:consensus]()
 
-colnames2[2] = "this_rep"
-colnames2[3] = "smooth_rep"
-names!(df2, colnames2)
-
-display(df2)
-println()
+vtrue = oracle_results(A)
