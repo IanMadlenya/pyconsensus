@@ -210,17 +210,15 @@ class Oracle(object):
         """
         covariance_matrix, mean_deviation = self.weighted_cov(reports_filled)
 
-        U = np.linalg.svd(covariance_matrix)[0]
+        U, Sigma, Vt = np.linalg.svd(covariance_matrix)
         first_loading = U.T[0]
         first_score = np.dot(mean_deviation, U).T[0]
 
-        SVD = np.linalg.svd(covariance_matrix)
+        # # H is the same as U but is not normalized by length
+        # H = PCA().fit_transform(covariance_matrix)
 
-        # H is the same as U but is not normalized by length
-        H = PCA().fit_transform(covariance_matrix)
-
-        # Normalize loading by Euclidean distance
-        H_first_loading = H[:,0] / np.sqrt(np.sum(H[:,0]**2))
+        # # Normalize loading by Euclidean distance
+        # H_first_loading = H[:,0] / np.sqrt(np.sum(H[:,0]**2))
 
         set1 = first_score + np.abs(np.min(first_score))
         set2 = first_score - np.max(first_score)
@@ -236,45 +234,78 @@ class Oracle(object):
             print U
 
         if self.run_ica:
-            ica = FastICA(n_components=len(covariance_matrix),
-                          whiten=True,
-                          random_state=0,
-                          max_iter=1002)
+            threshold = 0.95
 
-            with warnings.catch_warnings(record=True) as w:
-                try:
-                    S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
-                    if len(w):
-                        net_adj_prin_comp = adj_prin_comp
-                        ica_convergence = False
-                    else:
-                        if self.verbose:
-                            print "ICA loadings:"
-                            print S_
+            U, Sigma, Vt = np.linalg.svd(covariance_matrix)
+            variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
+            
+            for i, var_exp in enumerate(variance_explained):
+                loading = U.T[i]
+                score = np.dot(mean_deviation, U).T[i]
+                if i == 0:
+                    net_score = Sigma[i] * score
+                else:
+                    net_score += Sigma[i] * score
+                if var_exp > threshold: break
+            
+            # import pdb; pdb.set_trace()
 
-                        A_ = ica.mixing_ # Estimated mixing matrix
+            # # H is the same as U but is not normalized by length
+            # H = PCA().fit_transform(covariance_matrix)
+
+            # # Normalize loading by Euclidean distance
+            # H_first_loading = H[:,0] / np.sqrt(np.sum(H[:,0]**2))
+
+            set1 = net_score + np.abs(np.min(net_score))
+            set2 = net_score - np.max(net_score)
+            old = np.dot(self.reputation.T, reports_filled)
+            new1 = np.dot(self.get_weight(set1), reports_filled)
+            new2 = np.dot(self.get_weight(set2), reports_filled)
+
+            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+            net_adj_prin_comp = set1 if ref_ind <= 0 else set2
+
+
+            # ica = FastICA(n_components=len(covariance_matrix),
+            #               whiten=True,
+            #               random_state=0,
+            #               max_iter=1002)
+
+            # with warnings.catch_warnings(record=True) as w:
+            #     try:
+            #         S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
+            #         if len(w):
+            #             net_adj_prin_comp = adj_prin_comp
+            #             ica_convergence = False
+            #         else:
+            #             if self.verbose:
+            #                 print "ICA loadings:"
+            #                 print S_
+
+            #             A_ = ica.mixing_ # Estimated mixing matrix
                         
-                        # S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
-                        S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
+            #             # S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
+            #             S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
 
-                        S_set1 = S_first_score + np.abs(np.min(S_first_score))
-                        S_set2 = S_first_score - np.max(S_first_score)
+            #             S_set1 = S_first_score + np.abs(np.min(S_first_score))
+            #             S_set2 = S_first_score - np.max(S_first_score)
 
-                        S_old = np.dot(self.reputation.T, reports_filled)
-                        S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
-                        S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
+            #             S_old = np.dot(self.reputation.T, reports_filled)
+            #             S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
+            #             S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
 
-                        S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
-                        S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
+            #             S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
+            #             S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
 
-                        if self.verbose:
-                            print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+            #             if self.verbose:
+            #                 print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
 
-                        net_adj_prin_comp = (S_adj_prin_comp + adj_prin_comp)*0.5
-                        ica_convergence = True
-                except:
-                    net_adj_prin_comp = adj_prin_comp
-                    ica_convergence = False
+            #             # net_adj_prin_comp = (S_adj_prin_comp + adj_prin_comp)*0.5
+            #             net_adj_prin_comp = S_adj_prin_comp
+            #             ica_convergence = True
+            #     except:
+            #         net_adj_prin_comp = adj_prin_comp
+            #         ica_convergence = False
         else:
             net_adj_prin_comp = adj_prin_comp
             ica_convergence = False
@@ -528,7 +559,7 @@ def main(argv=None):
                                 [ -1, -1,  1,  1],
                                 [ -1, -1,  1,  1]])
             # oracle = Oracle(reports=reports, reputation=reputation)
-            oracle = Oracle(reports=reports)
+            oracle = Oracle(reports=reports, run_ica=True)
             A = oracle.consensus()
             print A["agents"]["this_rep"]
         elif opt in ('-m', '--missing'):

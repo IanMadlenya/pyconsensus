@@ -107,7 +107,7 @@ end
 function simulate()
     results = (Float64)[]
     i = 0
-    while i <= 50
+    while i <= 5000
         reports, reputation = generate_data()
         result = consensus(reports, reputation)
         if result != nothing
