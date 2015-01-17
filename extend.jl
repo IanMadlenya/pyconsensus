@@ -29,59 +29,13 @@ function oracle_results(A)
     colnames2[4] = "smooth_rep"
     names!(df2, colnames2)
 
-    display(df2)
-    println()
+    # display(df2)
+    # println()
 
     vtrue
 end
 
-# Default test case
-if extension == "default"
-    # true=1, false=-1, indeterminate=0.5, no response=NaN
-    reports = [  1  1 -1 NaN ;
-                 1 -1 -1  -1 ;
-                 1  1 -1  -1 ;
-                 1  1  1  -1 ;
-               NaN -1  1   1 ;
-                -1 -1  1   1 ]
-    reputation = [2; 10; 4; 2; 7; 1]
-    reputation = PyArray(PyObject(reputation))
-
-# Random test case
-elseif extension == "random"
-    num_reports = 100
-    num_events = 100
-    reports = convert(Array{Float64,2}, rand(-1:2:1, num_reports, num_events))
-    reports[reports .== 0] = NaN
-    reputation = rand(1:100, num_reports)
-
-elseif extension == "example"
-    # Taken from Truthcoin/lib/ConsensusMechanism.r
-    #           C1.1 C2.1 C3.0 C4.0
-    # True         1    1    0    0
-    # Distort 1    1    0    0    0
-    # True         1    1    0    0
-    # Distort 2    1    1    1    0
-    # Liar         0    0    1    1
-    # Liar         0    0    1    1
-    reports = [ 1  1  0  0 ;    # True
-                1  0  0  0 ;    # Distort 1
-                1  1  0  0 ;    # True
-                1  1  1  0 ;    # Distort 2
-                0  0  1  1 ;    # Liar
-                0  0  1  1 ]    # Liar
-    reports[reports .== 0] = -1
-    df = convert(DataFrame, reports)
-    colnames = names(df)
-    colnames[1] = "C1.1"
-    colnames[2] = "C2.1"
-    colnames[3] = "C3.0"
-    colnames[4] = "C4.0"
-    names!(df, colnames)
-
-    reputation = [1; 1; 1; 1; 1; 1]
-
-elseif extension == "sim"
+function generate_data()
     # 1. Generate artificial "true, distort (semi-true), liar" list
     COLLUDE = 0.5     # 0.6 = 60% chance that liars' lies will be identical
     DISTORT = 0.25    # 0.25 = 25% chance of random incorrect answer
@@ -136,31 +90,105 @@ elseif extension == "sim"
     end
 
     # 3. Optimize RMSD between actual this_rep dispensed, and an ideal this_rep
-    display([players reports])
-    println()
+    # display([players reports])
+    # println()
 
     reputation = ones(num_players)
 
+    return (reports, reputation)
 end
 
-println("With ICA")
-oracle = pyconsensus.Oracle(reports=reports, reputation=reputation, run_ica=true)
-A = oracle[:consensus]()
-# display(convert(DataFrame, A["agents"]))
-# display(convert(DataFrame, A["events"]))
-# println()
-println(string("ICA convergence: ", A["ica_convergence"]))
-vtrue = oracle_results(A)
-if vtrue != nothing
-    println(string("vs true sum: ", sum(vtrue)))
-end
+function consensus(reports, reputation)
+    ica_vtrue = pca_vtrue = 0
 
-if A["ica_convergence"]
-    println("Without ICA")
-    oracle = pyconsensus.Oracle(reports=reports, reputation=reputation, run_ica=false)
+    # println("With ICA")
+    oracle = pyconsensus.Oracle(reports=reports, reputation=reputation, run_ica=true)
     A = oracle[:consensus]()
+    # display(convert(DataFrame, A["agents"]))
+    # display(convert(DataFrame, A["events"]))
+    # println()
+    # println(string("ICA convergence: ", A["ica_convergence"]))
     vtrue = oracle_results(A)
     if vtrue != nothing
-        println(string("vs true sum: ", sum(vtrue)))
+        ica_vtrue = sum(vtrue)
+        # println(string("vs true sum: ", ica_vtrue))
     end
+
+    if A["ica_convergence"]
+        # println("Without ICA")
+        oracle = pyconsensus.Oracle(reports=reports, reputation=reputation, run_ica=false)
+        A = oracle[:consensus]()
+        vtrue = oracle_results(A)
+        if vtrue != nothing
+            pca_vtrue = sum(vtrue)
+            # println(string("vs true sum: ", pca_vtrue))
+        end
+        ica_vtrue - pca_vtrue
+    else
+        nothing
+    end
+end
+
+# Default test case
+if extension == "default"
+    # true=1, false=-1, indeterminate=0.5, no response=NaN
+    reports = [  1  1 -1 NaN ;
+                 1 -1 -1  -1 ;
+                 1  1 -1  -1 ;
+                 1  1  1  -1 ;
+               NaN -1  1   1 ;
+                -1 -1  1   1 ]
+    reputation = [2; 10; 4; 2; 7; 1]
+    reputation = PyArray(PyObject(reputation))
+    consensus(reports, reputation)
+
+# Random test case
+elseif extension == "random"
+    num_reports = 100
+    num_events = 100
+    reports = convert(Array{Float64,2}, rand(-1:2:1, num_reports, num_events))
+    reports[reports .== 0] = NaN
+    reputation = rand(1:100, num_reports)
+    consensus(reports, reputation)
+
+elseif extension == "example"
+    # Taken from Truthcoin/lib/ConsensusMechanism.r
+    #           C1.1 C2.1 C3.0 C4.0
+    # True         1    1    0    0
+    # Distort 1    1    0    0    0
+    # True         1    1    0    0
+    # Distort 2    1    1    1    0
+    # Liar         0    0    1    1
+    # Liar         0    0    1    1
+    reports = [ 1  1  0  0 ;    # True
+                1  0  0  0 ;    # Distort 1
+                1  1  0  0 ;    # True
+                1  1  1  0 ;    # Distort 2
+                0  0  1  1 ;    # Liar
+                0  0  1  1 ]    # Liar
+    reports[reports .== 0] = -1
+    df = convert(DataFrame, reports)
+    colnames = names(df)
+    colnames[1] = "C1.1"
+    colnames[2] = "C2.1"
+    colnames[3] = "C3.0"
+    colnames[4] = "C4.0"
+    names!(df, colnames)
+
+    reputation = [1; 1; 1; 1; 1; 1]
+    consensus(reports, reputation)
+
+elseif extension == "sim"
+    results = (Float64)[]
+    i = 0
+    while i <= 50
+        reports, reputation = generate_data()
+        result = consensus(reports, reputation)
+        if result != nothing
+            push!(results, result)
+            i += 1
+        end
+    end
+    println(string("PCA only vs PCA+ICA (", i-1, " iterations; more negative = improvement vs PCA alone):"))
+    println(round(mean(results), 6), " +/- ", round(std(results), 6))
 end
