@@ -1,29 +1,33 @@
 using PyCall
 using DataFrames
-# using JointMoments
+using JointMoments
 
 @pyimport pyconsensus
 
 COLLUDE = 0.5     # 0.6 = 60% chance that liars' lies will be identical
 DISTORT = 0.25    # 0.25 = 25% chance of random incorrect answer
+VERBOSE = false
 num_events = 10
 num_players = 30
 
 function oracle_results(A)
-    old_rep = A["agents"]["old_rep"]        # previous reputation
     this_rep = A["agents"]["this_rep"]      # from this round
-    smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
 
-    vtrue = this_rep - this_rep[first(find(players .== "true"))]
-    df2 = convert(DataFrame, [players vtrue this_rep smooth_rep])
-    colnames2 = names(df2)
-    colnames2[1] = "player"
-    colnames2[2] = "vs true"
-    colnames2[3] = "this_rep"
-    colnames2[4] = "smooth_rep"
-    names!(df2, colnames2)
+    if VERBOSE
+        old_rep = A["agents"]["old_rep"]        # previous reputation
+        smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
+        vtrue = this_rep - this_rep[first(find(players .== "true"))]
+        df2 = convert(DataFrame, [players vtrue this_rep smooth_rep])
+        colnames2 = names(df2)
+        colnames2[1] = "player"
+        colnames2[2] = "vs true"
+        colnames2[3] = "this_rep"
+        colnames2[4] = "smooth_rep"
+        names!(df2, colnames2)
+        display(df2)
+    end
 
-    vtrue
+    this_rep - this_rep[first(find(players .== "true"))]
 end
 
 function generate_data()
