@@ -229,9 +229,9 @@ class Oracle(object):
 
         if self.verbose:
             print "PCA loadings:"
-            print U
+            print H
 
-        ica_convergence = False
+        convergence = False
 
         if self.run_fixed_threshold:
             threshold = 0.95
@@ -256,6 +256,8 @@ class Oracle(object):
 
             ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
             net_adj_prin_comp = set1 if ref_ind <= 0 else set2
+
+            convergence = True
 
         elif self.run_ica:
             ica = FastICA(n_components=len(covariance_matrix),
@@ -297,7 +299,7 @@ class Oracle(object):
                         # ICA only
                         net_adj_prin_comp = S_adj_prin_comp
 
-                        ica_convergence = True
+                        convergence = True
                 except:
                     net_adj_prin_comp = adj_prin_comp
         else:
@@ -325,7 +327,7 @@ class Oracle(object):
             "old_rep": self.reputation.T,
             "this_rep": row_reward_weighted,
             "smooth_rep": smooth_rep,
-            "ica_convergence": ica_convergence,
+            "convergence": convergence,
         }
 
     def fill_na(self, reports, scaled_index):
@@ -504,7 +506,7 @@ class Oracle(object):
                 },
             'participation': 1 - percent_na,
             'avg_certainty': avg_certainty,
-            'ica_convergence': player_info['ica_convergence'],
+            'convergence': player_info['convergence'],
         }
 
 def main(argv=None):

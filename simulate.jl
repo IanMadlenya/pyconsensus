@@ -1,17 +1,20 @@
 using PyCall
 using DataFrames
-using JointMoments
+# using JointMoments
+# using Winston
+using Gadfly
 
 @pyimport pyconsensus
 
-COLLUDE = 0.5     # 0.6 = 60% chance that liars' lies will be identical
-DISTORT = 0.25    # 0.25 = 25% chance of random incorrect answer
+COLLUDE = 1.0     # 0.6 = 60% chance that liars' lies will be identical
+DISTORT = 0.2     # 0.2 = 20% chance of random incorrect answer
 VERBOSE = false
-num_events = 10
+ITERMAX = 10
+num_events = 25
 num_players = 30
 
-function oracle_results(A)
-    this_rep = A["agents"]["this_rep"]      # from this round
+function oracle_results(A, players)
+    this_rep = A["agents"]["this_rep"]          # from this round
 
     if VERBOSE
         old_rep = A["agents"]["old_rep"]        # previous reputation
@@ -80,40 +83,77 @@ function generate_data()
         end
     end
 
-    (reports, ones(num_players))
+    (reports, ones(num_players), players)
 end
 
-function consensus(reports, reputation)
+function consensus(reports, reputation, players)
 
-    # With ICA
+    # Experimental (e.g., with ICA)
     A = pyconsensus.Oracle(reports=reports,
                            reputation=reputation,
                            run_fixed_threshold=true)[:consensus]()
-    if A["ica_convergence"]
-        ica_vtrue = sum(oracle_results(A))
+    if A["convergence"]
+        exp_vtrue = sum(oracle_results(A, players))
 
-        # Without ICA
-        pca_vtrue = oracle_results(
+        # Reference (e.g., without ICA)
+        ref_vtrue = sum(oracle_results(
             pyconsensus.Oracle(reports=reports,
-                               reputation=reputation)[:consensus]()
-        )
-        (vtrue == nothing) ? nothing : ica_vtrue - sum(pca_vtrue)
+                               reputation=reputation)[:consensus](),
+            players
+        ))
+        (ref_vtrue == nothing) ?
+            nothing : (ref_vtrue, exp_vtrue, exp_vtrue - ref_vtrue)
     end
 end
 
 function simulate()
-    results = (Float64)[]
-    i = 0
-    while i <= 100
-        reports, reputation = generate_data()
-        result = consensus(reports, reputation)
+    ref_vtrue = (Float64)[]
+    exp_vtrue = (Float64)[]
+    difference = (Float64)[]
+    iterate = (Int64)[]
+    i = 1
+    while i <= ITERMAX
+        reports, reputation, players = generate_data()
+        result = consensus(reports, reputation, players)
         if result != nothing
-            push!(results, result)
+            push!(ref_vtrue, result[1])
+            push!(exp_vtrue, result[2])
+            push!(difference, result[3])
+            push!(iterate, i)
+            if VERBOSE
+                (i == ITERMAX) || (i % 10 == 0) ? println('.') : print('.')
+            end
             i += 1
         end
     end
-    println(string("PCA only vs PCA+ICA (", i-1, " iterations; more negative = improvement vs PCA alone):"))
-    println(round(mean(results), 6), " +/- ", round(std(results), 6))
+    println("Reference:    ",
+            round(median(ref_vtrue), 6), " +/- ", round(std(ref_vtrue), 6))
+    println("Experimental: ",
+            round(median(exp_vtrue), 6), " +/- ", round(std(exp_vtrue), 6))
+    println("Reference vs experimental (", i-1,
+            " iterations; negative = improvement vs reference):")
+    println(round(median(difference), 6), " +/- ", round(std(difference), 6))
+
+    # Plot results (Winston)
+    # figure(width=1000, height=600)
+    # P = FramedPlot(title="simulated consensus",
+    #                xlabel="iteration",
+    #                ylabel="Δ reward")
+    # add(P, Curve(iterate, ref_vtrue, color="blue"))
+    # add(P, Curve(iterate, exp_vtrue, color="red"))
+    # add(P, Curve(iterate, difference, color="black"))
+    # display(P)
+    # file(P, "sim.png")
+
+    # Plot results (Gadfly)
+    pl = plot(layer(x=iterate, y=ref_vtrue,
+                    Geom.line, color=["reference"]),
+              layer(x=iterate, y=exp_vtrue,
+                    Geom.line, color=["experimental"]),
+              layer(x=iterate, y=difference,
+                    Geom.line, color=["difference"]),
+              Guide.XLabel("iteration"), Guide.YLabel("Δ reward"))
+    draw(SVG("sim.svg", 12inch, 6inch), pl)
 end
 
 simulate()
