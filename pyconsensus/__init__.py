@@ -211,15 +211,12 @@ class Oracle(object):
         """
         covariance_matrix, mean_deviation = self.weighted_cov(reports_filled)
 
-        U, Sigma, Vt = np.linalg.svd(covariance_matrix)
-        first_loading = U.T[0]
-        first_score = np.dot(mean_deviation, U).T[0]
+        # H is the un-normalized eigenvector matrix
+        H = PCA().fit_transform(covariance_matrix)
 
-        # # H is the same as U but is not normalized by length
-        # H = PCA().fit_transform(covariance_matrix)
-
-        # # Normalize loading by Euclidean distance
-        # H_first_loading = H[:,0] / np.sqrt(np.sum(H[:,0]**2))
+        # Normalize loading by Euclidean distance
+        first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
+        first_score = np.dot(mean_deviation, first_loading)
 
         set1 = first_score + np.abs(np.min(first_score))
         set2 = first_score - np.max(first_score)
@@ -229,10 +226,12 @@ class Oracle(object):
 
         ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
         adj_prin_comp = set1 if ref_ind <= 0 else set2
-        
+
         if self.verbose:
             print "PCA loadings:"
             print U
+
+        ica_convergence = False
 
         if self.run_fixed_threshold:
             threshold = 0.95
@@ -242,7 +241,7 @@ class Oracle(object):
             
             for i, var_exp in enumerate(variance_explained):
                 loading = U.T[i]
-                score = np.dot(mean_deviation, U).T[i]
+                score = np.dot(mean_deviation, loading)
                 if i == 0:
                     net_score = Sigma[i] * score
                 else:
@@ -269,7 +268,6 @@ class Oracle(object):
                     S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
                     if len(w):
                         net_adj_prin_comp = adj_prin_comp
-                        ica_convergence = False
                     else:
                         if self.verbose:
                             print "ICA loadings:"
@@ -302,10 +300,8 @@ class Oracle(object):
                         ica_convergence = True
                 except:
                     net_adj_prin_comp = adj_prin_comp
-                    ica_convergence = False
         else:
             net_adj_prin_comp = adj_prin_comp
-            ica_convergence = False
 
         row_reward_weighted = self.reputation
         if max(abs(net_adj_prin_comp)) != 0:

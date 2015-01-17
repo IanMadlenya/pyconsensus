@@ -14,17 +14,10 @@ function oracle_results(A)
     this_rep = A["agents"]["this_rep"]      # from this round
     smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
 
-    if extension == "sim"
-        vtrue = this_rep - this_rep[first(find(players .== "true"))]
-        df2 = convert(DataFrame, [players vtrue this_rep smooth_rep])
-        colnames2 = names(df2)
-        colnames2[1] = "player"
-    else
-        df2 = convert(DataFrame, [old_rep this_rep smooth_rep])
-        colnames2 = names(df2)
-        colnames2[1] = "old_rep"
-    end
-
+    vtrue = this_rep - this_rep[first(find(players .== "true"))]
+    df2 = convert(DataFrame, [players vtrue this_rep smooth_rep])
+    colnames2 = names(df2)
+    colnames2[1] = "player"
     colnames2[2] = "vs true"
     colnames2[3] = "this_rep"
     colnames2[4] = "smooth_rep"
@@ -83,28 +76,24 @@ function generate_data()
         end
     end
 
-    reputation = ones(num_players)
-    return (reports, reputation)
+    (reports, ones(num_players))
 end
 
 function consensus(reports, reputation)
 
     # With ICA
-    oracle = pyconsensus.Oracle(reports=reports,
-                                reputation=reputation,
-                                run_fixed_threshold=true)
-    A = oracle[:consensus]()
+    A = pyconsensus.Oracle(reports=reports,
+                           reputation=reputation,
+                           run_fixed_threshold=true)[:consensus]()
     if A["ica_convergence"]
-        vtrue = oracle_results(A)
-        ica_vtrue = sum(vtrue)
+        ica_vtrue = sum(oracle_results(A))
 
         # Without ICA
-        oracle = pyconsensus.Oracle(reports=reports,
-                                    reputation=reputation,
-                                    run_fixed_threshold=false)
-        A = oracle[:consensus]()
-        vtrue = oracle_results(A)
-        (vtrue == nothing) ? nothing : ica_vtrue - sum(vtrue)
+        pca_vtrue = oracle_results(
+            pyconsensus.Oracle(reports=reports,
+                               reputation=reputation)[:consensus]()
+        )
+        (vtrue == nothing) ? nothing : ica_vtrue - sum(pca_vtrue)
     end
 end
 
