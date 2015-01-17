@@ -1,8 +1,6 @@
 using PyCall
 using DataFrames
-# using StatsBase
 # using JointMoments
-# using MultivariateStats
 
 @pyimport pyconsensus
 
@@ -36,6 +34,7 @@ function oracle_results(A)
 end
 
 function generate_data()
+
     # 1. Generate artificial "true, distort (semi-true), liar" list
     honesty = rand(num_players)
     players = fill("", num_players)
@@ -69,11 +68,13 @@ function generate_data()
 
     # Collusion
     for i in 1:num_liars-1
+
         # Pairs
         diceroll = first(rand(1))
         if diceroll < COLLUDE
             reports[liars[i],:] = reports[liars[i+1],:]
         end
+        
         # Triples
         if i + 2 < num_liars
             if diceroll < COLLUDE^2
@@ -87,17 +88,20 @@ function generate_data()
 end
 
 function consensus(reports, reputation)
-    ica_vtrue = pca_vtrue = 0
 
     # With ICA
-    oracle = pyconsensus.Oracle(reports=reports, reputation=reputation, run_ica=true)
+    oracle = pyconsensus.Oracle(reports=reports,
+                                reputation=reputation,
+                                run_fixed_threshold=true)
     A = oracle[:consensus]()
     if A["ica_convergence"]
         vtrue = oracle_results(A)
         ica_vtrue = sum(vtrue)
 
         # Without ICA
-        oracle = pyconsensus.Oracle(reports=reports, reputation=reputation, run_ica=false)
+        oracle = pyconsensus.Oracle(reports=reports,
+                                    reputation=reputation,
+                                    run_fixed_threshold=false)
         A = oracle[:consensus]()
         vtrue = oracle_results(A)
         (vtrue == nothing) ? nothing : ica_vtrue - sum(vtrue)
@@ -107,7 +111,7 @@ end
 function simulate()
     results = (Float64)[]
     i = 0
-    while i <= 5000
+    while i <= 100
         reports, reputation = generate_data()
         result = consensus(reports, reputation)
         if result != nothing

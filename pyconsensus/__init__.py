@@ -72,7 +72,7 @@ class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
                  catch_tolerance=0.1, max_row=5000, alpha=0.1, verbose=False,
-                 run_ica=False):
+                 run_ica=False, run_fixed_threshold=False):
         """
         Args:
           reports (list-of-lists): reports matrix; rows = reporters, columns = Events.
@@ -92,6 +92,7 @@ class Oracle(object):
         self.verbose = verbose
         self.num_reports = len(reports)
         self.run_ica = run_ica
+        self.run_fixed_threshold = run_fixed_threshold
         if reputation is None:
             self.weighted = False
             self.total_rep = self.num_reports
@@ -233,7 +234,7 @@ class Oracle(object):
             print "PCA loadings:"
             print U
 
-        if self.run_ica:
+        if self.run_fixed_threshold:
             threshold = 0.95
 
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
@@ -247,14 +248,6 @@ class Oracle(object):
                 else:
                     net_score += Sigma[i] * score
                 if var_exp > threshold: break
-            
-            # import pdb; pdb.set_trace()
-
-            # # H is the same as U but is not normalized by length
-            # H = PCA().fit_transform(covariance_matrix)
-
-            # # Normalize loading by Euclidean distance
-            # H_first_loading = H[:,0] / np.sqrt(np.sum(H[:,0]**2))
 
             set1 = net_score + np.abs(np.min(net_score))
             set2 = net_score - np.max(net_score)
@@ -265,47 +258,51 @@ class Oracle(object):
             ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
             net_adj_prin_comp = set1 if ref_ind <= 0 else set2
 
+        elif self.run_ica:
+            ica = FastICA(n_components=len(covariance_matrix),
+                          whiten=True,
+                          random_state=0,
+                          max_iter=1002)
 
-            # ica = FastICA(n_components=len(covariance_matrix),
-            #               whiten=True,
-            #               random_state=0,
-            #               max_iter=1002)
+            with warnings.catch_warnings(record=True) as w:
+                try:
+                    S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
+                    if len(w):
+                        net_adj_prin_comp = adj_prin_comp
+                        ica_convergence = False
+                    else:
+                        if self.verbose:
+                            print "ICA loadings:"
+                            print S_
 
-            # with warnings.catch_warnings(record=True) as w:
-            #     try:
-            #         S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
-            #         if len(w):
-            #             net_adj_prin_comp = adj_prin_comp
-            #             ica_convergence = False
-            #         else:
-            #             if self.verbose:
-            #                 print "ICA loadings:"
-            #                 print S_
-
-            #             A_ = ica.mixing_ # Estimated mixing matrix
+                        A_ = ica.mixing_ # Estimated mixing matrix
                         
-            #             # S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
-            #             S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
+                        # S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
+                        S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
 
-            #             S_set1 = S_first_score + np.abs(np.min(S_first_score))
-            #             S_set2 = S_first_score - np.max(S_first_score)
+                        S_set1 = S_first_score + np.abs(np.min(S_first_score))
+                        S_set2 = S_first_score - np.max(S_first_score)
 
-            #             S_old = np.dot(self.reputation.T, reports_filled)
-            #             S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
-            #             S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
+                        S_old = np.dot(self.reputation.T, reports_filled)
+                        S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
+                        S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
 
-            #             S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
-            #             S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
+                        S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
+                        S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
 
-            #             if self.verbose:
-            #                 print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+                        if self.verbose:
+                            print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
 
-            #             # net_adj_prin_comp = (S_adj_prin_comp + adj_prin_comp)*0.5
-            #             net_adj_prin_comp = S_adj_prin_comp
-            #             ica_convergence = True
-            #     except:
-            #         net_adj_prin_comp = adj_prin_comp
-            #         ica_convergence = False
+                        # Mixed ICA + PCA
+                        # net_adj_prin_comp = (S_adj_prin_comp + adj_prin_comp)*0.5
+
+                        # ICA only
+                        net_adj_prin_comp = S_adj_prin_comp
+
+                        ica_convergence = True
+                except:
+                    net_adj_prin_comp = adj_prin_comp
+                    ica_convergence = False
         else:
             net_adj_prin_comp = adj_prin_comp
             ica_convergence = False
@@ -559,7 +556,7 @@ def main(argv=None):
                                 [ -1, -1,  1,  1],
                                 [ -1, -1,  1,  1]])
             # oracle = Oracle(reports=reports, reputation=reputation)
-            oracle = Oracle(reports=reports, run_ica=True)
+            oracle = Oracle(reports=reports, run_fixed_threshold=True)
             A = oracle.consensus()
             print A["agents"]["this_rep"]
         elif opt in ('-m', '--missing'):
