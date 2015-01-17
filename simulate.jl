@@ -6,6 +6,11 @@ using DataFrames
 
 @pyimport pyconsensus
 
+COLLUDE = 0.5     # 0.6 = 60% chance that liars' lies will be identical
+DISTORT = 0.25    # 0.25 = 25% chance of random incorrect answer
+num_events = 10
+num_players = 30
+
 function oracle_results(A)
     old_rep = A["agents"]["old_rep"]        # previous reputation
     this_rep = A["agents"]["this_rep"]      # from this round
@@ -32,11 +37,6 @@ end
 
 function generate_data()
     # 1. Generate artificial "true, distort (semi-true), liar" list
-    COLLUDE = 0.5     # 0.6 = 60% chance that liars' lies will be identical
-    DISTORT = 0.25    # 0.25 = 25% chance of random incorrect answer
-    num_events = 10
-    num_players = 30
-
     honesty = rand(num_players)
     players = fill("", num_players)
     players[honesty .>= 0.5] = "true"

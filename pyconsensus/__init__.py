@@ -254,7 +254,7 @@ class Oracle(object):
 
                         A_ = ica.mixing_ # Estimated mixing matrix
                         
-                        S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
+                        # S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
                         S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
 
                         S_set1 = S_first_score + np.abs(np.min(S_first_score))
