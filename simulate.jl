@@ -1,12 +1,9 @@
 using PyCall
 using DataFrames
-# using JointMoments
-# using Winston
 using Gadfly
 
 @pyimport pyconsensus
 
-COLLUDE = 0.85    # 0.6 = 60% chance that liars' lies will be identical
 DISTORT = 0.0     # 0.2 = 20% chance of random incorrect answer
 VERBOSE = false
 ITERMAX = 1000
@@ -34,7 +31,7 @@ function oracle_results(A, players)
      sum(this_rep[players .== "liar"] .> 0))
 end
 
-function generate_data()
+function generate_data(collusion)
 
     # 1. Generate artificial "true, distort (semi-true), liar" list
     honesty = rand(num_players)
@@ -72,34 +69,32 @@ function generate_data()
 
         # Pairs
         diceroll = first(rand(1))
-        if diceroll < COLLUDE
+        if diceroll < collusion
             reports[liars[i],:] = reports[liars[i+1],:]
         end
         
         # Triples
         if i + 2 < num_liars
-            if diceroll < COLLUDE^2
+            if diceroll < collusion^2
                 reports[liars[i],:] = reports[liars[i+2],:]
             end
         end
     end
 
-    if VERBOSE
-        display([players reports])
-    end
+    ~VERBOSE || display([players reports])
 
     (reports, ones(num_players), players)
 end
 
-function consensus(reports, reputation, players)
+function consensus(reports, reputation, players, algo)
 
     # Experimental (e.g., with ICA)
     A = pyconsensus.Oracle(
         reports=reports,
         reputation=reputation,
-        run_fixed_threshold=true,
+        # run_fixed_threshold=true,
         # run_inverse_scores=true,
-        # run_ica=true,
+        run_ica=true,
     )[:consensus]()
 
     if A["convergence"]
@@ -119,7 +114,7 @@ function consensus(reports, reputation, players)
     end
 end
 
-function simulate()
+function simulate(algo, collusion)
     ref_vtrue = (Float64)[]
     exp_vtrue = (Float64)[]
     difference = (Float64)[]
@@ -129,8 +124,8 @@ function simulate()
     i = 1
     players = []
     while i <= ITERMAX
-        reports, reputation, players = generate_data()
-        result = consensus(reports, reputation, players)
+        reports, reputation, players = generate_data(collusion)
+        result = consensus(reports, reputation, players, algo)
         if result != nothing
             push!(ref_vtrue, result[1])
             push!(exp_vtrue, result[2])
@@ -144,37 +139,66 @@ function simulate()
             i += 1
         end
     end
-    println("Reference:    ",
-            round(median(ref_vtrue), 6), " +/- ", round(std(ref_vtrue), 6),
-            " (", round(median(ref_beats), 6), " +/- ", round(std(ref_beats), 6), ")")
-    println("Experimental: ",
-            round(median(exp_vtrue), 6), " +/- ", round(std(exp_vtrue), 6),
-            " (", round(median(exp_beats), 6), " +/- ", round(std(exp_beats), 6), ")")
-    println("Reference vs experimental (", i-1,
-            " iterations; negative = improvement vs reference):")
-    println(round(median(difference), 6), " +/- ", round(std(difference), 6))
 
-    # Plot results (Winston)
-    # figure(width=1000, height=600)
-    # P = FramedPlot(title="simulated consensus",
-    #                xlabel="iteration",
-    #                ylabel="Δ reward")
-    # add(P, Curve(iterate, ref_vtrue, color="blue"))
-    # add(P, Curve(iterate, exp_vtrue, color="red"))
-    # add(P, Curve(iterate, difference, color="black"))
-    # display(P)
-    # file(P, "sim.png")
+    if VERBOSE
+        println("Reference:    ",
+                round(median(ref_vtrue), 6), " +/- ", round(std(ref_vtrue), 6),
+                " (", round(median(ref_beats), 6), " +/- ", round(std(ref_beats), 6), ")")
+        println("Experimental: ",
+                round(median(exp_vtrue), 6), " +/- ", round(std(exp_vtrue), 6),
+                " (", round(median(exp_beats), 6), " +/- ", round(std(exp_beats), 6), ")")
+        println("Reference vs experimental (", i-1,
+                " iterations; negative = improvement vs reference):")
+        println(round(median(difference), 6), " +/- ", round(std(difference), 6))
+    end
 
-    # Plot results (Gadfly)
-    println("Building plot...")
-    pl = plot(layer(x=iterate, y=ref_vtrue,
-                    Geom.line, color=["reference"]),
-              layer(x=iterate, y=exp_vtrue,
-                    Geom.line, color=["experimental"]),
-              layer(x=iterate, y=difference,
-                    Geom.line, color=["difference"]),
-              Guide.XLabel("iteration"), Guide.YLabel("Δ reward"))
-    draw(SVG("sim.svg", 12inch, 6inch), pl)
+    map(median, (ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference))
 end
 
-simulate()
+# Sensitivity analysis
+function sensitivity(algo)
+    ref_vtrue_median = (Float64)[]
+    exp_vtrue_median = (Float64)[]
+    ref_beats_median = (Float64)[]
+    exp_beats_median = (Float64)[]
+    difference_median = (Float64)[]
+
+    # Collusion parameter:
+    # 0.6 = 60% chance that liars' lies will be identical
+    collude_range = 0:0.05:1
+    for c = collude_range
+        ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference = simulate(algo, c)
+        push!(ref_vtrue_median, ref_vtrue)
+        push!(ref_beats_median, ref_beats)
+        push!(exp_vtrue_median, exp_vtrue)
+        push!(exp_beats_median, exp_beats)
+        push!(difference_median, difference)
+    end
+
+    ~VERBOSE || println("Building plot...")
+
+    # Plot vtrue values vs collusion parameter
+    pl_vtrue = plot(layer(x=collude_range, y=ref_vtrue_median,
+                          Geom.line, color=["reference"]),
+                    layer(x=collude_range, y=exp_vtrue_median,
+                          Geom.line, color=["experimental"]),
+                    layer(x=collude_range, y=difference_median,
+                          Geom.line, color=["difference"]),
+                    Guide.XLabel("collusion"), Guide.YLabel("reward"))
+    pl_vtrue_file = string("sens_vtrue_", algo, ".svg")
+    draw(SVG(pl_vtrue_file, 12inch, 6inch), pl_vtrue)
+
+    # Plot beats values vs collusion parameter
+    pl_beats = plot(layer(x=collude_range, y=ref_beats_median,
+                          Geom.line, color=["reference"]),
+                    layer(x=collude_range, y=exp_beats_median,
+                          Geom.line, color=["experimental"]),
+                    Guide.XLabel("collusion"), Guide.YLabel("beats"))
+    pl_beats_file = string("sens_beats_", algo, ".svg")
+    draw(SVG(pl_beats_file, 12inch, 6inch), pl_beats)
+end
+
+for algo in ("fixed_threshold", "inverse_scores", "ica")
+    println("Testing algo: ", algo)
+    sensitivity(algo)
+end
