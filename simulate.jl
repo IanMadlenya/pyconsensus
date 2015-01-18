@@ -9,9 +9,9 @@ using Gadfly
 COLLUDE = 0.85    # 0.6 = 60% chance that liars' lies will be identical
 DISTORT = 0.0     # 0.2 = 20% chance of random incorrect answer
 VERBOSE = false
-ITERMAX = 1000
-num_events = 50
-num_players = 1000
+ITERMAX = 100
+num_events = 25
+num_players = 50
 
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
@@ -83,16 +83,24 @@ function generate_data()
         end
     end
 
+    if VERBOSE
+        display([players reports])
+    end
+
     (reports, ones(num_players), players)
 end
 
 function consensus(reports, reputation, players)
 
     # Experimental (e.g., with ICA)
-    A = pyconsensus.Oracle(reports=reports,
-                           reputation=reputation,
-                           # run_fixed_threshold=true,
-                           run_ica=true)[:consensus]()
+    A = pyconsensus.Oracle(
+        reports=reports,
+        reputation=reputation,
+        # run_fixed_threshold=true,
+        run_inverse_scores=true,
+        # run_ica=true,
+    )[:consensus]()
+
     if A["convergence"]
         exp_vtrue = sum(oracle_results(A, players))
 
