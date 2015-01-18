@@ -6,12 +6,12 @@ using Gadfly
 
 @pyimport pyconsensus
 
-COLLUDE = 1.0     # 0.6 = 60% chance that liars' lies will be identical
-DISTORT = 0.2     # 0.2 = 20% chance of random incorrect answer
+COLLUDE = 0.85    # 0.6 = 60% chance that liars' lies will be identical
+DISTORT = 0.0     # 0.2 = 20% chance of random incorrect answer
 VERBOSE = false
-ITERMAX = 10
-num_events = 25
-num_players = 30
+ITERMAX = 1000
+num_events = 50
+num_players = 1000
 
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
@@ -91,7 +91,8 @@ function consensus(reports, reputation, players)
     # Experimental (e.g., with ICA)
     A = pyconsensus.Oracle(reports=reports,
                            reputation=reputation,
-                           run_fixed_threshold=true)[:consensus]()
+                           # run_fixed_threshold=true,
+                           run_ica=true)[:consensus]()
     if A["convergence"]
         exp_vtrue = sum(oracle_results(A, players))
 
@@ -101,8 +102,8 @@ function consensus(reports, reputation, players)
                                reputation=reputation)[:consensus](),
             players
         ))
-        (ref_vtrue == nothing) ?
-            nothing : (ref_vtrue, exp_vtrue, exp_vtrue - ref_vtrue)
+        (ref_vtrue == nothing) ? nothing :
+            (ref_vtrue, exp_vtrue, exp_vtrue - ref_vtrue)
     end
 end
 
@@ -120,9 +121,9 @@ function simulate()
             push!(exp_vtrue, result[2])
             push!(difference, result[3])
             push!(iterate, i)
-            if VERBOSE
+            # if VERBOSE
                 (i == ITERMAX) || (i % 10 == 0) ? println('.') : print('.')
-            end
+            # end
             i += 1
         end
     end
@@ -146,6 +147,7 @@ function simulate()
     # file(P, "sim.png")
 
     # Plot results (Gadfly)
+    println("Building plot...")
     pl = plot(layer(x=iterate, y=ref_vtrue,
                     Geom.line, color=["reference"]),
               layer(x=iterate, y=exp_vtrue,

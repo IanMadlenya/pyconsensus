@@ -277,7 +277,7 @@ class Oracle(object):
 
                         A_ = ica.mixing_ # Estimated mixing matrix
                         
-                        # S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
+                        S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
                         S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
 
                         S_set1 = S_first_score + np.abs(np.min(S_first_score))
@@ -299,7 +299,10 @@ class Oracle(object):
                         # ICA only
                         net_adj_prin_comp = S_adj_prin_comp
 
-                        convergence = True
+                        if any(np.isnan(net_adj_prin_comp)):
+                            convergence = False
+                        else:
+                            convergence = True
                 except:
                     net_adj_prin_comp = adj_prin_comp
         else:
@@ -554,7 +557,7 @@ def main(argv=None):
                                 [ -1, -1,  1,  1],
                                 [ -1, -1,  1,  1]])
             # oracle = Oracle(reports=reports, reputation=reputation)
-            oracle = Oracle(reports=reports, run_fixed_threshold=True)
+            oracle = Oracle(reports=reports, run_ica=True)
             A = oracle.consensus()
             print A["agents"]["this_rep"]
         elif opt in ('-m', '--missing'):
