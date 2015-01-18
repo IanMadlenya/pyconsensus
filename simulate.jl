@@ -167,6 +167,7 @@ function sensitivity(algo)
     # 0.6 = 60% chance that liars' lies will be identical
     collude_range = 0:0.05:1
     for c = collude_range
+        println("collude: ", c)
         ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference = simulate(algo, c)
         push!(ref_vtrue_median, ref_vtrue)
         push!(ref_beats_median, ref_beats)
