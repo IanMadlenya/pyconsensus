@@ -9,9 +9,9 @@ using Gadfly
 COLLUDE = 0.85    # 0.6 = 60% chance that liars' lies will be identical
 DISTORT = 0.0     # 0.2 = 20% chance of random incorrect answer
 VERBOSE = false
-ITERMAX = 100
-num_events = 25
-num_players = 50
+ITERMAX = 1000
+num_events = 50
+num_players = 100
 
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
@@ -30,7 +30,8 @@ function oracle_results(A, players)
         display(df2)
     end
 
-    this_rep - this_rep[first(find(players .== "true"))]
+    (this_rep - this_rep[first(find(players .== "true"))],
+     sum(this_rep[players .== "liar"] .> 0))
 end
 
 function generate_data()
@@ -96,22 +97,25 @@ function consensus(reports, reputation, players)
     A = pyconsensus.Oracle(
         reports=reports,
         reputation=reputation,
-        # run_fixed_threshold=true,
-        run_inverse_scores=true,
+        run_fixed_threshold=true,
+        # run_inverse_scores=true,
         # run_ica=true,
     )[:consensus]()
 
     if A["convergence"]
-        exp_vtrue = sum(oracle_results(A, players))
+        # "beats" are liars that escaped punishment
+        exp_vtrue, exp_beats = oracle_results(A, players)
+        exp_vtrue = sum(exp_vtrue)
 
         # Reference (e.g., without ICA)
-        ref_vtrue = sum(oracle_results(
+        ref_vtrue, ref_beats = oracle_results(
             pyconsensus.Oracle(reports=reports,
                                reputation=reputation)[:consensus](),
-            players
-        ))
+            players,
+        )
+        ref_vtrue = sum(ref_vtrue)
         (ref_vtrue == nothing) ? nothing :
-            (ref_vtrue, exp_vtrue, exp_vtrue - ref_vtrue)
+            (ref_vtrue, exp_vtrue, exp_vtrue - ref_vtrue, exp_beats, ref_beats)
     end
 end
 
@@ -119,8 +123,11 @@ function simulate()
     ref_vtrue = (Float64)[]
     exp_vtrue = (Float64)[]
     difference = (Float64)[]
+    ref_beats = (Int64)[]
+    exp_beats = (Int64)[]
     iterate = (Int64)[]
     i = 1
+    players = []
     while i <= ITERMAX
         reports, reputation, players = generate_data()
         result = consensus(reports, reputation, players)
@@ -128,17 +135,21 @@ function simulate()
             push!(ref_vtrue, result[1])
             push!(exp_vtrue, result[2])
             push!(difference, result[3])
+            push!(ref_beats, result[4])
+            push!(exp_beats, result[5])
             push!(iterate, i)
-            # if VERBOSE
+            if VERBOSE
                 (i == ITERMAX) || (i % 10 == 0) ? println('.') : print('.')
-            # end
+            end
             i += 1
         end
     end
     println("Reference:    ",
-            round(median(ref_vtrue), 6), " +/- ", round(std(ref_vtrue), 6))
+            round(median(ref_vtrue), 6), " +/- ", round(std(ref_vtrue), 6),
+            " (", round(median(ref_beats), 6), " +/- ", round(std(ref_beats), 6), ")")
     println("Experimental: ",
-            round(median(exp_vtrue), 6), " +/- ", round(std(exp_vtrue), 6))
+            round(median(exp_vtrue), 6), " +/- ", round(std(exp_vtrue), 6),
+            " (", round(median(exp_beats), 6), " +/- ", round(std(exp_beats), 6), ")")
     println("Reference vs experimental (", i-1,
             " iterations; negative = improvement vs reference):")
     println(round(median(difference), 6), " +/- ", round(std(difference), 6))
