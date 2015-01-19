@@ -580,7 +580,8 @@ def main(argv=None):
             # oracle = Oracle(reports=reports, reputation=reputation)
             oracle = Oracle(reports=reports, run_ica=True)
             A = oracle.consensus()
-            print json.dumps(A["agents"]["this_rep"].tolist(), indent=3)
+            print(pd.DataFrame(A["events"]))
+            print(pd.DataFrame(A["agents"]))
         elif opt in ('-m', '--missing'):
             # true=1, false=-1, indeterminate=0.5, no response=np.nan
             reports = np.array([[      1,  1, -1, np.nan],
@@ -592,7 +593,8 @@ def main(argv=None):
             reputation = [2, 10, 4, 2, 7, 1]
             oracle = Oracle(reports=reports, reputation=reputation)
             A = oracle.consensus()
-            print json.dumps(A["agents"]["this_rep"].tolist(), indent=3)
+            print(pd.DataFrame(A["events"]))
+            print(pd.DataFrame(A["agents"]))
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv))
