@@ -57,17 +57,6 @@ np.set_printoptions(linewidth=225,
                     suppress=True,
                     formatter={"float": "{: 0.6f}".format})
 
-# reports = [[ 1,  1, -1, -1 ],
-#            [ 1, -1, -1, -1 ],
-#            [ 1,  1, -1, -1 ],
-#            [ 1,  1,  1, -1 ],
-#            [-1, -1,  1,  1 ],
-#            [-1, -1,  1,  1 ]]
-# reputation = [1, 1, 1, 1, 1, 1]
-# reports = np.array(reports)
-# oracle = Oracle(reports=reports, reputation=reputation)
-# oracle.consensus()
-
 class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
@@ -91,6 +80,7 @@ class Oracle(object):
         self.alpha = alpha
         self.verbose = verbose
         self.num_reports = len(reports)
+        self.num_events = len(reports[0])
         self.run_ica = run_ica
         self.run_fixed_threshold = run_fixed_threshold
         self.run_inverse_scores = run_inverse_scores
@@ -138,17 +128,6 @@ class Oracle(object):
         if np.sum(v) == 0:
             v += 1
         return v / np.sum(v)
-
-    # def catch(self, X):
-    #     """Forces continuous values into bins at 0, 0.5, and 1"""
-    #     center = 0.5
-    #     print X, " vs ", center, "+/-", center + self.catch_tolerance
-    #     if X < center - self.catch_tolerance:
-    #         return 0
-    #     elif X > center + self.catch_tolerance:
-    #         return 1
-    #     else:
-    #         return 0.5
 
     def catch(self, X):
         """Forces continuous values into bins at -1, 0, and 1"""
@@ -262,24 +241,24 @@ class Oracle(object):
 
         elif self.run_inverse_scores:
 
-            H = PCA().fit_transform(covariance_matrix)
+            principal_components = PCA().fit_transform(covariance_matrix)
 
-            first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
+            first_loading = principal_components[:,0]
+            first_loading = np.ma.masked_array(first_loading / np.sqrt(np.sum(first_loading**2)))
             first_score = np.dot(mean_deviation, first_loading)
 
-            inverse_score = 1 / np.abs(first_score)
-            inverse_score /= np.sum(inverse_score)
-
-            net_adj_prin_comp = inverse_score
+            # Normalized absolute inverse scores
+            net_adj_prin_comp = 1 / np.abs(first_score)
+            net_adj_prin_comp /= np.sum(net_adj_prin_comp)
 
             convergence = True
 
         elif self.run_ica:
-            ica = FastICA(n_components=len(covariance_matrix),
-                          whiten=True,
-                          random_state=0,
-                          max_iter=1002)
-
+            ica = FastICA(n_components=self.num_events, whiten=True)
+            # ica = FastICA(n_components=self.num_events,
+            #               whiten=True,
+            #               random_state=0,
+            #               max_iter=1000)
             with warnings.catch_warnings(record=True) as w:
                 try:
                     S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
@@ -289,15 +268,13 @@ class Oracle(object):
                         if self.verbose:
                             print "ICA loadings:"
                             print S_
-
-                        A_ = ica.mixing_ # Estimated mixing matrix
                         
-                        S_first_loading = S_[:,0] / np.sqrt(np.sum(S_[:,0]**2))
+                        S_first_loading = S_[:,0]
+                        S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
                         S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
 
                         S_set1 = S_first_score + np.abs(np.min(S_first_score))
                         S_set2 = S_first_score - np.max(S_first_score)
-
                         S_old = np.dot(self.reputation.T, reports_filled)
                         S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
                         S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
@@ -308,18 +285,7 @@ class Oracle(object):
                         if self.verbose:
                             print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
 
-                        # Mixed ICA + PCA
-                        # net_adj_prin_comp = (S_adj_prin_comp + adj_prin_comp)*0.5
-
-                        # import pdb; pdb.set_trace()
-
-                        # Normalized absolute inverse scores
-                        inverse_score = 1 / np.abs(S_first_score)
-                        inverse_score /= np.sum(inverse_score)
-                        net_adj_prin_comp = inverse_score
-
-                        # ICA only
-                        # net_adj_prin_comp = S_adj_prin_comp
+                        net_adj_prin_comp = S_adj_prin_comp
 
                         if any(np.isnan(net_adj_prin_comp)):
                             convergence = False
@@ -551,34 +517,14 @@ def main(argv=None):
             print(__doc__)
             return 0
         elif opt in ('-x', '--example'):
-            # # old: true=1, false=0, indeterminate=0.5, no response=-1
-            # reports = np.array([[  1,  1,  0,  1],
-            #                     [  1,  0,  0,  0],
-            #                     [  1,  1,  0,  0],
-            #                     [  1,  1,  1,  0],
-            #                     [  1,  0,  1,  1],
-            #                     [  0,  0,  1,  1]])
             # # new: true=1, false=-1, indeterminate=0.5, no response=0
-            # reports = np.array([[  1,  1, -1,  1],
-            #                     [  1, -1, -1, -1],
-            #                     [  1,  1, -1, -1],
-            #                     [  1,  1,  1, -1],
-            #                     [  1, -1,  1,  1],
-            #                     [ -1, -1,  1,  1]])
-            # reputation = [2, 10, 4, 2, 7, 1]
-            # reports = np.array([[1, 1, 0, 0],
-            #                     [1, 0, 0, 0],
-            #                     [1, 1, 0, 0],
-            #                     [1, 1, 1, 0],
-            #                     [0, 0, 1, 1],
-            #                     [0, 0, 1, 1]])
-            # reports = np.array([[  1,  1, -1, -1],
-            #                     [  1, -1, -1, -1],
-            #                     [  1,  1, -1, -1],
-            #                     [  1,  1,  1, -1],
-            #                     [ -1, -1,  1,  1],
-            #                     [ -1, -1,  1,  1]])
-            # oracle = Oracle(reports=reports, reputation=reputation)
+            reports = np.array([[  1,  1, -1, -1],
+                                [  1, -1, -1, -1],
+                                [  1,  1, -1, -1],
+                                [  1,  1,  1, -1],
+                                [ -1, -1,  1,  1],
+                                [ -1, -1,  1,  1]])
+            reputation = [2, 10, 4, 2, 7, 1]
             reports = np.array([
                 [-1.0,   0.0,  -1.0,   1.0,   1.0,  -1.0,   0.0,   1.0,   0.0,   0.0,   1.0,   0.0,   0.0,   0.0,   0.0,   1.0,   0.0,   0.0,   0.0,   0.0,   0.0,  -1.0,   0.0,   1.0,   1.0],   # "true"    
                 [-1.0,   0.0,  -1.0,   1.0,   1.0,  -1.0,   0.0,   1.0,   0.0,   0.0,   1.0,   0.0,   0.0,   0.0,   0.0,   1.0,   0.0,   0.0,   0.0,   0.0,   0.0,  -1.0,   0.0,   1.0,   1.0],   # "true"    
@@ -631,31 +577,12 @@ def main(argv=None):
                 [-1.0,   0.0,  -1.0,   1.0,   1.0,  -1.0,   0.0,   1.0,   0.0,   0.0,   1.0,   0.0,   0.0,   0.0,   0.0,   1.0,   0.0,   0.0,   0.0,   0.0,   0.0,  -1.0,   0.0,   1.0,   1.0],   # "true"    
                 [ 1.0,   0.0,   1.0,   1.0,  -1.0,   0.0,   1.0,   0.0,   1.0,   1.0,  -1.0,   0.0,  -1.0,   0.0,  -1.0,  -1.0,   1.0,  -1.0,  -1.0,   0.0,   0.0,   1.0,  -1.0,   0.0,  -1.0],   # "liar"
             ])
+            # oracle = Oracle(reports=reports, reputation=reputation)
             oracle = Oracle(reports=reports, run_ica=True)
             A = oracle.consensus()
-            print A["agents"]["this_rep"]
+            print json.dumps(A["agents"]["this_rep"].tolist(), indent=3)
         elif opt in ('-m', '--missing'):
-            # # old: true=1, false=0, indeterminate=0.5, no response=-1
-            # reports = np.array([[  1,  1,  0, -1],
-            #                     [  1,  0,  0,  0],
-            #                     [  1,  1,  0,  0],
-            #                     [  1,  1,  1,  0],
-            #                     [ -1,  0,  1,  1],
-            #                     [  0,  0,  1,  1]])
-            # reports = np.array([[      1,  1,  0, np.nan],
-            #                     [      1,  0,  0,      0],
-            #                     [      1,  1,  0,      0],
-            #                     [      1,  1,  1,      0],
-            #                     [ np.nan,  0,  1,      1],
-            #                     [      0,  0,  1,      1]])
-            # # new: true=1, false=-1, indeterminate=0.5, no response=0
-            # reports = np.array([[  1,  1, -1,  0],
-            #                     [  1, -1, -1, -1],
-            #                     [  1,  1, -1, -1],
-            #                     [  1,  1,  1, -1],
-            #                     [  0, -1,  1,  1],
-            #                     [ -1, -1,  1,  1]])
-            # new: true=1, false=-1, indeterminate=0.5, no response=np.nan
+            # true=1, false=-1, indeterminate=0.5, no response=np.nan
             reports = np.array([[      1,  1, -1, np.nan],
                                 [      1, -1, -1,     -1],
                                 [      1,  1, -1,     -1],
@@ -665,16 +592,7 @@ def main(argv=None):
             reputation = [2, 10, 4, 2, 7, 1]
             oracle = Oracle(reports=reports, reputation=reputation)
             A = oracle.consensus()
-            print A["agents"]["this_rep"]
-        elif opt in ('-t', '--test'):
-            reports = np.array([[ 1, 0.5,  0,  0],
-                                [ 1, 0.5,  0,  0],
-                                [ 1,   1,  0,  0],
-                                [ 1, 0.5,  0,  0],
-                                [ 1, 0.5,  0,  0],
-                                [ 1, 0.5,  0,  0],
-                                [ 1, 0.5,  0,  0]])
-            
+            print json.dumps(A["agents"]["this_rep"].tolist(), indent=3)
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv))
