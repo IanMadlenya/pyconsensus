@@ -28,7 +28,7 @@ function oracle_results(A, players)
     end
 
     (this_rep - this_rep[first(find(players .== "true"))],
-     sum(this_rep[players .== "liar"] .> 0))
+     sum(this_rep[players .== "liar"] .> 0) / num_players)
 end
 
 function generate_data(collusion)
@@ -124,8 +124,8 @@ function simulate(algo, collusion)
     ref_vtrue = (Float64)[]
     exp_vtrue = (Float64)[]
     difference = (Float64)[]
-    ref_beats = (Int64)[]
-    exp_beats = (Int64)[]
+    ref_beats = (Float64)[]
+    exp_beats = (Float64)[]
     iterate = (Int64)[]
     i = 1
     players = []
