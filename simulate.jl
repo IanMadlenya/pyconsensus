@@ -89,13 +89,19 @@ end
 function consensus(reports, reputation, players, algo)
 
     # Experimental (e.g., with ICA)
-    A = pyconsensus.Oracle(
-        reports=reports,
-        reputation=reputation,
-        # run_fixed_threshold=true,
-        # run_inverse_scores=true,
-        run_ica=true,
-    )[:consensus]()
+    if algo == "fixed_threshold"
+        A = pyconsensus.Oracle(reports=reports,
+                               reputation=reputation,
+                               run_ica=true)[:consensus]()
+    elseif algo == "inverse_scores"
+        A = pyconsensus.Oracle(reports=reports,
+                               reputation=reputation,
+                               run_inverse_scores=true)[:consensus]()
+    elseif algo == "ica"
+        A = pyconsensus.Oracle(reports=reports,
+                               reputation=reputation,
+                               run_ica=true)[:consensus]()
+    end
 
     if A["convergence"]
         # "beats" are liars that escaped punishment
