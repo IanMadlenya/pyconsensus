@@ -100,31 +100,6 @@ class Oracle(object):
             self.rep_coins = (np.abs(np.copy(reputation)) * 10**6).astype(int)
             self.total_rep_coins = sum(self.rep_coins)
 
-    def rescale(self):
-        """Forces a matrix of raw (user-supplied) information
-        (for example, # of House Seats, or DJIA) to conform to
-        SVD-appropriate range.
-
-        Practically, this is done by subtracting min and dividing by
-        scaled-range (which itself is max-min).
-
-        """
-        # Calulate multiplicative factors
-        inv_span = []
-        for scale in self.event_bounds:
-            inv_span.append(1 / float(scale["max"] - scale["min"]))
-
-        # Recenter
-        out_matrix = np.ma.copy(self.reports)
-        cols = self.reports.shape[1]
-        for i in range(cols):
-            out_matrix[:,i] -= self.event_bounds[i]["min"]
-
-        # Rescale
-        out_matrix[np.isnan(out_matrix)] = np.mean(out_matrix)
-
-        return np.dot(out_matrix, np.diag(inv_span))
-
     def get_weight(self, v):
         """Takes an array, and returns proportional distance from zero."""
         v = abs(v)
@@ -459,8 +434,29 @@ class Oracle(object):
             scaled_index = [False] * self.reports.shape[1]
             scaled_reports = self.reports
         else:
+            # Forces a matrix of raw (user-supplied) information
+            # (for example, # of House Seats, or DJIA) to conform to
+            # SVD-appropriate range.
+            #
+            # Practically, this is done by subtracting min and dividing by
+            # scaled-range (which itself is max-min).
             scaled_index = [scale["scaled"] for scale in self.event_bounds]
-            scaled_reports = self.rescale()
+
+            # Calulate multiplicative factors
+            inv_span = []
+            for scale in self.event_bounds:
+                inv_span.append(1 / float(scale["max"] - scale["min"]))
+
+            # Recenter
+            out_matrix = np.ma.copy(self.reports)
+            cols = self.reports.shape[1]
+            for i in range(cols):
+                out_matrix[:,i] -= self.event_bounds[i]["min"]
+
+            # Rescale
+            out_matrix[np.isnan(out_matrix)] = np.mean(out_matrix)
+
+            scaled_reports = np.dot(out_matrix, np.diag(inv_span))
 
         # Handle missing values
         reports_filled = self.fill_na(scaled_reports, scaled_index)
