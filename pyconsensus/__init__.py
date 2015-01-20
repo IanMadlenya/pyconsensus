@@ -61,7 +61,8 @@ class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
                  catch_tolerance=0.1, max_row=5000, alpha=0.1, verbose=False,
-                 run_ica=False, run_fixed_threshold=False, run_inverse_scores=False):
+                 run_ica=False, run_fixed_threshold=False, run_inverse_scores=False,
+                 run_ica_prewhitened=False, run_ica_inverse_scores=False):
         """
         Args:
           reports (list-of-lists): reports matrix; rows = reporters, columns = Events.
@@ -84,6 +85,8 @@ class Oracle(object):
         self.run_ica = run_ica
         self.run_fixed_threshold = run_fixed_threshold
         self.run_inverse_scores = run_inverse_scores
+        self.run_ica_inverse_scores = run_ica_inverse_scores
+        self.run_ica_prewhitened = run_ica_prewhitened
         if reputation is None:
             self.weighted = False
             self.total_rep = self.num_reports
@@ -254,7 +257,7 @@ class Oracle(object):
             convergence = True
 
         elif self.run_ica:
-            ica = FastICA(n_components=self.num_events, whiten=True)
+            ica = FastICA(n_components=self.num_events, whiten=False)
             # ica = FastICA(n_components=self.num_events,
             #               whiten=True,
             #               random_state=0,
@@ -287,10 +290,78 @@ class Oracle(object):
 
                         net_adj_prin_comp = S_adj_prin_comp
 
-                        if any(np.isnan(net_adj_prin_comp)):
-                            convergence = False
-                        else:
-                            convergence = True
+                        # Normalized absolute inverse scores
+                        net_adj_prin_comp = 1 / np.abs(first_score)
+                        net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+
+                        convergence = not any(np.isnan(net_adj_prin_comp))
+                except:
+                    net_adj_prin_comp = adj_prin_comp
+
+        elif self.run_ica_prewhitened:
+            ica = FastICA(n_components=self.num_events, whiten=True)
+            with warnings.catch_warnings(record=True) as w:
+                try:
+                    S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
+                    if len(w):
+                        net_adj_prin_comp = adj_prin_comp
+                    else:
+                        if self.verbose:
+                            print "ICA loadings:"
+                            print S_
+                        
+                        S_first_loading = S_[:,0]
+                        S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
+                        S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
+
+                        S_set1 = S_first_score + np.abs(np.min(S_first_score))
+                        S_set2 = S_first_score - np.max(S_first_score)
+                        S_old = np.dot(self.reputation.T, reports_filled)
+                        S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
+                        S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
+
+                        S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
+                        S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
+
+                        if self.verbose:
+                            print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+
+                        net_adj_prin_comp = S_adj_prin_comp
+
+                        # Normalized absolute inverse scores
+                        net_adj_prin_comp = 1 / np.abs(first_score)
+                        net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+
+                        convergence = not any(np.isnan(net_adj_prin_comp))
+                except:
+                    net_adj_prin_comp = adj_prin_comp
+
+        elif self.run_ica_inverse_scores:
+            ica = FastICA(n_components=self.num_events, whiten=True)
+            # ica = FastICA(n_components=self.num_events, whiten=False)
+            # ica = FastICA(n_components=self.num_events,
+            #               whiten=True,
+            #               random_state=0,
+            #               max_iter=1000)
+            with warnings.catch_warnings(record=True) as w:
+                try:
+                    S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
+                    if len(w):
+                        net_adj_prin_comp = adj_prin_comp
+                    else:
+                        if self.verbose:
+                            print "ICA loadings:"
+                            print S_
+                        
+                        S_first_loading = S_[:,0]
+                        S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
+                        S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
+
+                        # Normalized absolute inverse scores
+                        net_adj_prin_comp = 1 / np.abs(S_first_score)
+                        net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+
+                        convergence = not any(np.isnan(net_adj_prin_comp))
                 except:
                     net_adj_prin_comp = adj_prin_comp
         else:

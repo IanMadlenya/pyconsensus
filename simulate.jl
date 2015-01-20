@@ -6,7 +6,7 @@ using Gadfly
 
 DISTORT = 0.0     # 0.2 = 20% chance of random incorrect answer
 VERBOSE = false
-ITERMAX = 1000
+ITERMAX = 500
 num_events = 50
 num_players = 100
 
@@ -107,6 +107,14 @@ function consensus(reports, reputation, players, algo)
         A = pyconsensus.Oracle(reports=reports,
                                reputation=reputation,
                                run_ica=true)[:consensus]()
+    elseif algo == "ica_inverse_scores"
+        A = pyconsensus.Oracle(reports=reports,
+                               reputation=reputation,
+                               run_ica_inverse_scores=true)[:consensus]()
+    elseif algo == "ica_prewhitened"
+        A = pyconsensus.Oracle(reports=reports,
+                               reputation=reputation,
+                               run_ica_prewhitened=true)[:consensus]()
     end
 
     if A["convergence"]
@@ -177,7 +185,7 @@ function sensitivity(algo)
 
     # Collusion parameter:
     # 0.6 = 60% chance that liars' lies will be identical
-    collude_range = 0:0.05:1
+    collude_range = 0:0.2:1
     for c = collude_range
         println("collude: ", c)
         ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference = simulate(algo, c)
@@ -211,7 +219,8 @@ function sensitivity(algo)
     draw(SVG(pl_beats_file, 12inch, 6inch), pl_beats)
 end
 
-for algo in ("fixed_threshold", "inverse_scores", "ica")
+for algo in ("fixed_threshold", "inverse_scores", "ica",
+             "ica_inverse_scores", "ica_prewhitened")
     println("Testing algo: ", algo)
     sensitivity(algo)
 end
