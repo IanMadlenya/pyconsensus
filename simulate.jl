@@ -12,11 +12,11 @@ num_players = 100
 
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
+    vtrue = this_rep - this_rep[first(find(players .== "true"))]
 
     if VERBOSE
         old_rep = A["agents"]["old_rep"]        # previous reputation
         smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
-        vtrue = this_rep - this_rep[first(find(players .== "true"))]
         df2 = convert(DataFrame, [players vtrue this_rep smooth_rep])
         colnames2 = names(df2)
         colnames2[1] = "player"
@@ -27,8 +27,7 @@ function oracle_results(A, players)
         display(df2)
     end
 
-    (this_rep - this_rep[first(find(players .== "true"))],
-     sum(this_rep[players .== "liar"] .> 0) / num_players)
+    (vtrue, sum(vtrue[players .== "liar"] .> 0) / num_players)
 end
 
 function generate_data(collusion)
@@ -65,18 +64,25 @@ function generate_data(collusion)
     reports[liars,:] = convert(Array{Float64,2}, rand(-1:1, num_liars, num_events))
 
     # Collusion
-    for i in 1:num_liars-1
+    for i = 1:num_liars-1
 
         # Pairs
         diceroll = first(rand(1))
         if diceroll < collusion
             reports[liars[i],:] = reports[liars[i+1],:]
-        end
-        
-        # Triples
-        if i + 2 < num_liars
-            if diceroll < collusion^2
-                reports[liars[i],:] = reports[liars[i+2],:]
+
+            # Triples
+            if i + 2 < num_liars
+                if diceroll < collusion^2
+                    reports[liars[i],:] = reports[liars[i+2],:]
+                end
+
+                # Quadruples
+                if i + 3 < num_liars
+                    if diceroll < collusion^3
+                        reports[liars[i],:] = reports[liars[i+3],:]
+                    end
+                end
             end
         end
     end
