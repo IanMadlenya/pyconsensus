@@ -400,17 +400,9 @@ class Oracle(object):
                 # Guess the outcome; discriminate based on contract type.
                 if not scaled_index[i]:
                     outcome_guess = np.dot(active_events, active_rep)
-                    # print("AVG")
-                    # print(outcome_guess)
                 else:
-                    outcome_guess = weighted_median(active_events, active_rep)
-                    # print("MED")
-                    # print(outcome_guess)
-                    # import pdb; pdb.set_trace()
+                    outcome_guess = weighted_median(active_events.data, weights=active_rep)
                 outcomes_raw.append(outcome_guess)
-
-            # print("Raw:")
-            # print(np.array(outcomes_raw))
 
             # Fill in the predictions to the original M
             na_mat = reports.mask  # Defines the slice of the matrix which needs to be edited.
@@ -484,9 +476,7 @@ class Oracle(object):
 
         # Handle missing values
         reports_filled = self.interpolate(scaled_reports, scaled_index)
-        print(reports_filled.data)
-
-        sys.exit()
+        # print(reports_filled.data)
 
         # Consensus - Row Players
         # New Consensus Reward
