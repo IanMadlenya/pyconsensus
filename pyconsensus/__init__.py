@@ -108,15 +108,26 @@ class Oracle(object):
         return v / np.sum(v)
 
     def catch(self, X):
-        """Forces continuous values into bins at -1, 0, and 1"""
-        center = 0
+        """Forces continuous values into bins at 0, 0.5, and 1"""
+        center = 0.5
         # print X, " vs ", center, "+/-", center + self.catch_tolerance
         if X < center - self.catch_tolerance:
-            return -1
+            return 0
         elif X > center + self.catch_tolerance:
             return 1
         else:
-            return 0
+            return 0.5
+
+    # def catch(self, X):
+    #     """Forces continuous values into bins at -1, 0, and 1"""
+    #     center = 0
+    #     # print X, " vs ", center, "+/-", center + self.catch_tolerance
+    #     if X < center - self.catch_tolerance:
+    #         return -1
+    #     elif X > center + self.catch_tolerance:
+    #         return 1
+    #     else:
+    #         return 0
 
     def weighted_cov(self, reports_filled):
         """Weights are the number of coins people start with, so the aim of this
@@ -154,11 +165,6 @@ class Oracle(object):
             print(covariance_matrix)
 
         return covariance_matrix, mean_deviation
-
-    def weighted_prin_comp(self, reports_filled):
-
-        # return first_loading, first_score
-        return first_loading, row_reward_weighted
 
     def get_reward_weights(self, reports_filled):
         """Calculates new reputations using a weighted Principal Component
@@ -367,7 +373,7 @@ class Oracle(object):
             "convergence": convergence,
         }
 
-    def fill_na(self, reports, scaled_index):
+    def interpolate(self, reports, scaled_index):
         """Uses existing data and reputations to fill missing observations.
         Essentially a weighted average using all availiable non-NA data.
         """
@@ -393,10 +399,18 @@ class Oracle(object):
 
                 # Guess the outcome; discriminate based on contract type.
                 if not scaled_index[i]:
-                    outcome_guess = np.dot(active_events, active_rep)                    
+                    outcome_guess = np.dot(active_events, active_rep)
+                    # print("AVG")
+                    # print(outcome_guess)
                 else:
                     outcome_guess = weighted_median(active_events, active_rep)
+                    # print("MED")
+                    # print(outcome_guess)
+                    # import pdb; pdb.set_trace()
                 outcomes_raw.append(outcome_guess)
+
+            # print("Raw:")
+            # print(np.array(outcomes_raw))
 
             # Fill in the predictions to the original M
             na_mat = reports.mask  # Defines the slice of the matrix which needs to be edited.
@@ -454,12 +468,25 @@ class Oracle(object):
                 out_matrix[:,i] -= self.event_bounds[i]["min"]
 
             # Rescale
-            out_matrix[np.isnan(out_matrix)] = np.mean(out_matrix)
+            # out_matrix[np.isnan(out_matrix)] = np.mean(out_matrix)
+            nan_index = np.isnan(out_matrix)
+            out_matrix[nan_index] = 0
 
             scaled_reports = np.dot(out_matrix, np.diag(inv_span))
+            scaled_reports[nan_index] = np.nan
+            scaled_reports.mask[nan_index] = True
+
+            # print("scaled reports:")
+            # print(scaled_reports.data)
+            # print(json.dumps(np.array(scaled_reports).flatten().tolist(),
+            #                  indent=3,
+            #                  sort_keys=True))
 
         # Handle missing values
-        reports_filled = self.fill_na(scaled_reports, scaled_index)
+        reports_filled = self.interpolate(scaled_reports, scaled_index)
+        print(reports_filled.data)
+
+        sys.exit()
 
         # Consensus - Row Players
         # New Consensus Reward
@@ -572,8 +599,8 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv
     try:
-        short_opts = 'hxm'
-        long_opts = ['help', 'example', 'missing']
+        short_opts = 'hxms'
+        long_opts = ['help', 'example', 'missing', 'scaled']
         opts, vals = getopt.getopt(argv[1:], short_opts, long_opts)
     except getopt.GetoptError as e:
         sys.stderr.write(e.msg)
@@ -659,6 +686,38 @@ def main(argv=None):
                                 [     -1, -1,  1,      1]])
             reputation = [2, 10, 4, 2, 7, 1]
             oracle = Oracle(reports=reports, reputation=reputation)
+            A = oracle.consensus()
+            print(pd.DataFrame(A["events"]))
+            print(pd.DataFrame(A["agents"]))
+        elif opt in ('-s', '--scaled'):
+            # reports = np.array([[ 1,  1, -1, -1 ],
+            #                     [ 1, -1, -1, -1 ],
+            #                     [ 1,  1, -1, -1 ],
+            #                     [ 1,  1,  1, -1 ],
+            #                     [-1, -1,  1,  1 ],
+            #                     [-1, -1,  1,  1 ]])
+            # reputation = [1, 1, 1, 1, 1, 1]
+            # reports = np.array([[ 1,  1, -1, -1, 233, 16027.59],
+            #                     [ 1, -1, -1, -1, 199,   np.nan],
+            #                     [ 1,  1, -1, -1, 233, 16027.59],
+            #                     [ 1,  1,  1, -1, 250,   np.nan],
+            #                     [-1, -1,  1,  1, 435,  8001.00],
+            #                     [-1, -1,  1,  1, 435, 19999.00]])
+            reports = np.array([[ 1,  1,  0,  0, 233, 16027.59],
+                                [ 1,  0,  0,  0, 199,   np.nan],
+                                [ 1,  1,  0,  0, 233, 16027.59],
+                                [ 1,  1,  1,  0, 250,   np.nan],
+                                [ 0,  0,  1,  1, 435,  8001.00],
+                                [ 0,  0,  1,  1, 435, 19999.00]])
+            event_bounds = [
+                {"scaled": False, "min": 0, "max": 1},
+                {"scaled": False, "min": 0, "max": 1},
+                {"scaled": False, "min": 0, "max": 1},
+                {"scaled": False, "min": 0, "max": 1},
+                {"scaled": True, "min": 0, "max": 435},
+                {"scaled": True, "min": 8000, "max": 20000},
+            ]
+            oracle = Oracle(reports=reports, event_bounds=event_bounds)
             A = oracle.consensus()
             print(pd.DataFrame(A["events"]))
             print(pd.DataFrame(A["agents"]))
