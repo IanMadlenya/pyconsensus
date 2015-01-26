@@ -6,9 +6,9 @@ using Gadfly
 
 DISTORT = 0.0     # 0.2 = 20% chance of random incorrect answer
 VERBOSE = false
-ITERMAX = 500
-num_events = 50
-num_players = 100
+ITERMAX = 100
+num_events = 100
+num_players = 50
 
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
@@ -27,7 +27,7 @@ function oracle_results(A, players)
         display(df2)
     end
 
-    (vtrue, sum(vtrue[players .== "liar"] .> 0) / num_players)
+    (vtrue, sum(vtrue[players .== "liar"] .> 0))
 end
 
 function generate_data(collusion)
@@ -64,26 +64,34 @@ function generate_data(collusion)
     reports[liars,:] = convert(Array{Float64,2}, rand(-1:1, num_liars, num_events))
 
     # Collusion
-    for i = 1:num_liars-1
+    # for i = 1:num_liars-1
 
-        # Pairs
+    #     # Pairs
+    #     diceroll = first(rand(1))
+    #     if diceroll < collusion
+    #         reports[liars[i],:] = reports[liars[i+1],:]
+
+    #         # Triples
+    #         if i + 2 < num_liars
+    #             if diceroll < collusion^2
+    #                 reports[liars[i],:] = reports[liars[i+2],:]
+    #             end
+
+    #             # Quadruples
+    #             if i + 3 < num_liars
+    #                 if diceroll < collusion^3
+    #                     reports[liars[i],:] = reports[liars[i+3],:]
+    #                 end
+    #             end
+    #         end
+    #     end
+    # end
+
+    # All-or-nothing collusion ("conspiracy")
+    for i = 1:num_liars-1
         diceroll = first(rand(1))
         if diceroll < collusion
-            reports[liars[i],:] = reports[liars[i+1],:]
-
-            # Triples
-            if i + 2 < num_liars
-                if diceroll < collusion^2
-                    reports[liars[i],:] = reports[liars[i+2],:]
-                end
-
-                # Quadruples
-                if i + 3 < num_liars
-                    if diceroll < collusion^3
-                        reports[liars[i],:] = reports[liars[i+3],:]
-                    end
-                end
-            end
+            reports[liars[i],:] = reports[liars[1],:]
         end
     end
 

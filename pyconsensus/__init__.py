@@ -436,6 +436,7 @@ class Oracle(object):
 
         """
         # Fill the default scales (binary) if none are provided.
+        # (Discriminate based on contract type)
         if self.event_bounds is None:
             scaled_index = [False] * self.reports.shape[1]
             scaled_reports = self.reports
