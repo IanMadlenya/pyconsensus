@@ -107,27 +107,27 @@ class Oracle(object):
             v += 1
         return v / np.sum(v)
 
-    def catch(self, X):
-        """Forces continuous values into bins at 0, 0.5, and 1"""
-        center = 0.5
-        # print X, " vs ", center, "+/-", center + self.catch_tolerance
-        if X < center - self.catch_tolerance:
-            return 0
-        elif X > center + self.catch_tolerance:
-            return 1
-        else:
-            return 0.5
-
     # def catch(self, X):
-    #     """Forces continuous values into bins at -1, 0, and 1"""
-    #     center = 0
+    #     """Forces continuous values into bins at 0, 0.5, and 1"""
+    #     center = 0.5
     #     # print X, " vs ", center, "+/-", center + self.catch_tolerance
     #     if X < center - self.catch_tolerance:
-    #         return -1
+    #         return 0
     #     elif X > center + self.catch_tolerance:
     #         return 1
     #     else:
-    #         return 0
+    #         return 0.5
+
+    def catch(self, X):
+        """Forces continuous values into bins at -1, 0, and 1"""
+        center = 0
+        # print X, " vs ", center, "+/-", center + self.catch_tolerance
+        if X < center - self.catch_tolerance:
+            return -1
+        elif X > center + self.catch_tolerance:
+            return 1
+        else:
+            return 0
 
     def weighted_cov(self, reports_filled):
         """Weights are the number of coins people start with, so the aim of this
@@ -449,7 +449,7 @@ class Oracle(object):
             # scaled-range (which itself is max-min).
             scaled_index = [scale["scaled"] for scale in self.event_bounds]
 
-            # Calulate multiplicative factors
+            # Calculate multiplicative factors
             inv_span = []
             for scale in self.event_bounds:
                 inv_span.append(1 / float(scale["max"] - scale["min"]))
@@ -688,26 +688,34 @@ def main(argv=None):
             #                     [-1, -1,  1,  1 ],
             #                     [-1, -1,  1,  1 ]])
             # reputation = [1, 1, 1, 1, 1, 1]
-            # reports = np.array([[ 1,  1, -1, -1, 233, 16027.59],
-            #                     [ 1, -1, -1, -1, 199,   np.nan],
-            #                     [ 1,  1, -1, -1, 233, 16027.59],
-            #                     [ 1,  1,  1, -1, 250,   np.nan],
-            #                     [-1, -1,  1,  1, 435,  8001.00],
-            #                     [-1, -1,  1,  1, 435, 19999.00]])
-            reports = np.array([[ 1,  1,  0,  0, 233, 16027.59],
-                                [ 1,  0,  0,  0, 199,   np.nan],
-                                [ 1,  1,  0,  0, 233, 16027.59],
-                                [ 1,  1,  1,  0, 250,   np.nan],
-                                [ 0,  0,  1,  1, 435,  8001.00],
-                                [ 0,  0,  1,  1, 435, 19999.00]])
+            reports = np.array([[ 1,  1, -1, -1, 233, 16027.59],
+                                [ 1, -1, -1, -1, 199,   np.nan],
+                                [ 1,  1, -1, -1, 233, 16027.59],
+                                [ 1,  1,  1, -1, 250,   np.nan],
+                                [-1, -1,  1,  1, 435,  8001.00],
+                                [-1, -1,  1,  1, 435, 19999.00]])
             event_bounds = [
-                {"scaled": False, "min": 0, "max": 1},
-                {"scaled": False, "min": 0, "max": 1},
-                {"scaled": False, "min": 0, "max": 1},
-                {"scaled": False, "min": 0, "max": 1},
-                {"scaled": True, "min": 0, "max": 435},
-                {"scaled": True, "min": 8000, "max": 20000},
+                { "scaled": False, "min": -1,   "max": 1 },
+                { "scaled": False, "min": -1,   "max": 1 },
+                { "scaled": False, "min": -1,   "max": 1 },
+                { "scaled": False, "min": -1,   "max": 1 },
+                { "scaled": True,  "min": -1,   "max": 435 },
+                { "scaled": True,  "min": 8000, "max": 20000 },
             ]
+            # reports = np.array([[ 1,  1,  0,  0, 233, 16027.59],
+            #                     [ 1,  0,  0,  0, 199,   np.nan],
+            #                     [ 1,  1,  0,  0, 233, 16027.59],
+            #                     [ 1,  1,  1,  0, 250,   np.nan],
+            #                     [ 0,  0,  1,  1, 435,  8001.00],
+            #                     [ 0,  0,  1,  1, 435, 19999.00]])
+            # event_bounds = [
+            #     {"scaled": False, "min": 0, "max": 1},
+            #     {"scaled": False, "min": 0, "max": 1},
+            #     {"scaled": False, "min": 0, "max": 1},
+            #     {"scaled": False, "min": 0, "max": 1},
+            #     {"scaled": True, "min": 0, "max": 435},
+            #     {"scaled": True, "min": 8000, "max": 20000},
+            # ]
             oracle = Oracle(reports=reports, event_bounds=event_bounds)
             A = oracle.consensus()
             print(pd.DataFrame(A["events"]))
