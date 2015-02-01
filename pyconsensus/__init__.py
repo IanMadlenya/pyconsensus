@@ -107,27 +107,27 @@ class Oracle(object):
             v += 1
         return v / np.sum(v)
 
-    # def catch(self, X):
-    #     """Forces continuous values into bins at 0, 0.5, and 1"""
-    #     center = 0.5
-    #     # print X, " vs ", center, "+/-", center + self.catch_tolerance
-    #     if X < center - self.catch_tolerance:
-    #         return 0
-    #     elif X > center + self.catch_tolerance:
-    #         return 1
-    #     else:
-    #         return 0.5
-
     def catch(self, X):
-        """Forces continuous values into bins at -1, 0, and 1"""
-        center = 0
+        """Forces continuous values into bins at 0, 0.5, and 1"""
+        center = 0.5
         # print X, " vs ", center, "+/-", center + self.catch_tolerance
         if X < center - self.catch_tolerance:
-            return -1
+            return 0
         elif X > center + self.catch_tolerance:
             return 1
         else:
-            return 0
+            return 0.5
+
+    # def catch(self, X):
+    #     """Forces continuous values into bins at -1, 0, and 1"""
+    #     center = 0
+    #     # print X, " vs ", center, "+/-", center + self.catch_tolerance
+    #     if X < center - self.catch_tolerance:
+    #         return -1
+    #     elif X > center + self.catch_tolerance:
+    #         return 1
+    #     else:
+    #         return 0
 
     def weighted_cov(self, reports_filled):
         """Weights are the number of coins people start with, so the aim of this
@@ -419,7 +419,7 @@ class Oracle(object):
             # This replaces the NAs, which were zeros, with the predicted Event outcome.
 
             # Appropriately force the predictions into their discrete
-            # (0,.5,1) slot. (continuous variables can be gamed).
+            # slot. (continuous variables can be gamed).
             rows, cols = reports_new.shape
             for i in range(rows):
                 for j in range(cols):
@@ -509,7 +509,8 @@ class Oracle(object):
         for i, raw in enumerate(outcomes_raw):
             outcome_final.append(outcome_adj[i])
             if scaled_index[i]:
-                outcome_final[i] *= (self.event_bounds[i]["max"] - self.event_bounds[i]["min"])
+                outcome_final[i] *= self.event_bounds[i]["max"] - self.event_bounds[i]["min"]
+                outcome_final[i] += self.event_bounds[i]["min"]
 
         # .5 is obviously undesireable, this function travels from 0 to 1
         # with a minimum at .5
@@ -578,6 +579,7 @@ class Oracle(object):
                 'NAs Filled': na_mat.sum(axis=0).data.tolist(),
                 'participation_columns': participation_columns.data.tolist(),
                 'author_bonus': author_bonus.data.tolist(),
+                'outcome_adjusted': outcome_adj,
                 'outcome_final': outcome_final,
                 },
             'participation': 1 - percent_na,
@@ -699,7 +701,7 @@ def main(argv=None):
                 { "scaled": False, "min": -1,   "max": 1 },
                 { "scaled": False, "min": -1,   "max": 1 },
                 { "scaled": False, "min": -1,   "max": 1 },
-                { "scaled": True,  "min": -1,   "max": 435 },
+                { "scaled": True,  "min":  0,   "max": 435 },
                 { "scaled": True,  "min": 8000, "max": 20000 },
             ]
             # reports = np.array([[ 1,  1,  0,  0, 233, 16027.59],
