@@ -176,7 +176,7 @@ class Oracle(object):
         covariance_matrix, mean_deviation = self.weighted_cov(reports_filled)
 
         # H is the un-normalized eigenvector matrix
-        H = PCA().fit_transform(covariance_matrix)
+        H = np.linalg.svd(covariance_matrix)[0]
 
         # Normalize loading by Euclidean distance
         first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
@@ -225,7 +225,8 @@ class Oracle(object):
 
         elif self.run_inverse_scores:
 
-            principal_components = PCA().fit_transform(covariance_matrix)
+            # principal_components = PCA().fit_transform(covariance_matrix)
+            principal_components = np.linalg.svd(covariance_matrix)[0]
 
             first_loading = principal_components[:,0]
             first_loading = np.ma.masked_array(first_loading / np.sqrt(np.sum(first_loading**2)))
@@ -238,7 +239,7 @@ class Oracle(object):
             convergence = True
 
         elif self.run_ica:
-            ica = FastICA(n_components=self.num_events, whiten=False)
+            ica = FastICA(n_components=self.num_events, whiten=True)
             # ica = FastICA(n_components=self.num_events,
             #               whiten=True,
             #               random_state=0,
