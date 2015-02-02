@@ -96,6 +96,7 @@ function generate_data(collusion)
     # end
 
     ~VERBOSE || display([players reports])
+    display([players reports])
 
     (reports, ones(num_players), players)
 end

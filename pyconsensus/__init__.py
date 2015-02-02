@@ -107,27 +107,27 @@ class Oracle(object):
             v += 1
         return v / np.sum(v)
 
-    def catch(self, X):
-        """Forces continuous values into bins at 0, 0.5, and 1"""
-        center = 0.5
-        # print X, " vs ", center, "+/-", center + self.catch_tolerance
-        if X < center - self.catch_tolerance:
-            return 0
-        elif X > center + self.catch_tolerance:
-            return 1
-        else:
-            return 0.5
-
     # def catch(self, X):
-    #     """Forces continuous values into bins at -1, 0, and 1"""
-    #     center = 0
+    #     """Forces continuous values into bins at 0, 0.5, and 1"""
+    #     center = 0.5
     #     # print X, " vs ", center, "+/-", center + self.catch_tolerance
     #     if X < center - self.catch_tolerance:
-    #         return -1
+    #         return 0
     #     elif X > center + self.catch_tolerance:
     #         return 1
     #     else:
-    #         return 0
+    #         return 0.5
+
+    def catch(self, X):
+        """Forces continuous values into bins at -1, 0, and 1"""
+        center = 0
+        # print X, " vs ", center, "+/-", center + self.catch_tolerance
+        if X < center - self.catch_tolerance:
+            return -1
+        elif X > center + self.catch_tolerance:
+            return 1
+        else:
+            return 0
 
     def weighted_cov(self, reports_filled):
         """Weights are the number of coins people start with, so the aim of this
@@ -281,7 +281,7 @@ class Oracle(object):
                     net_adj_prin_comp = adj_prin_comp
 
         elif self.run_ica_prewhitened:
-            ica = FastICA(n_components=self.num_events, whiten=True)
+            ica = FastICA(n_components=self.num_events, whiten=False)
             with warnings.catch_warnings(record=True) as w:
                 try:
                     S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
