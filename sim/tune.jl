@@ -98,11 +98,17 @@ function generate_data(collusion)
     ~VERBOSE || display([players reports])
     display([players reports])
 
-    (reports, ones(num_players), players)
+    (reports, ones(num_players), players, correct_answers)
 end
 
 collusion = 0.5
-reports, reputation, players = generate_data(collusion)
+reports, reputation, players, correct_answers = generate_data(collusion)
 
 A = pyconsensus.Oracle(reports=reports, reputation=reputation)[:consensus]()
 vtrue, beats = oracle_results(A, players)
+
+correctness = A["events"]["outcome_final"] .== correct_answers'
+num_correct = countnz(correctness)
+display([A["events"]["outcome_final"] correct_answers' correctness])
+
+println("correct answers: ", num_correct, "/", num_events, " (", num_correct/num_events*100, "%)")

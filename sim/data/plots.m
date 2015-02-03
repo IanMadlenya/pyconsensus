@@ -59,7 +59,7 @@ clf
 plot(abs(fsr), delta_rep, '+')
 hold on
 for ii = 1:length(fs)
-    
+
     % marker size proportional to number of people with that score
     csize = 10*counts(find(ufsr == fsr(ii)));
 
@@ -73,3 +73,4 @@ for ii = 1:length(fs)
 end
 xlabel('principal component')
 ylabel('change in reputation')
+title('correct answers: 22/25 (88%)')

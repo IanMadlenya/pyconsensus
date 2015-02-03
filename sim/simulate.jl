@@ -101,7 +101,7 @@ function generate_data(collusion)
     ~VERBOSE || display([players reports])
     display([players reports])
 
-    (reports, ones(num_players), players)
+    (reports, ones(num_players), players, correct_answers)
 end
 
 function consensus(reports, reputation, players, algo)
@@ -156,7 +156,7 @@ function simulate(algo, collusion)
     i = 1
     players = []
     while i <= ITERMAX
-        reports, reputation, players = generate_data(collusion)
+        reports, reputation, players, correct_answers = generate_data(collusion)
         result = consensus(reports, reputation, players, algo)
         if result != nothing
             push!(ref_vtrue, result[1])
