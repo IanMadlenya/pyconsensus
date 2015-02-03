@@ -10,6 +10,9 @@ ITERMAX = 100
 num_events = 100
 num_players = 50
 
+LIAR_THRESHOLD = 0.25
+DISTORT_THRESHOLD = 0.5
+
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
     vtrue = this_rep - this_rep[first(find(players .== "true"))]
@@ -35,9 +38,9 @@ function generate_data(collusion)
     # 1. Generate artificial "true, distort (semi-true), liar" list
     honesty = rand(num_players)
     players = fill("", num_players)
-    players[honesty .>= 0.5] = "true"
-    players[0.25 .< honesty .< 0.5] = "distort"
-    players[honesty .<= 0.25] = "liar"
+    players[honesty .>= DISTORT_THRESHOLD] = "true"
+    players[LIAR_THRESHOLD .< honesty .< DISTORT_THRESHOLD] = "distort"
+    players[honesty .<= LIAR_THRESHOLD] = "liar"
 
     # 2. Build report matrix from this list
     trues = find(players .== "true")
