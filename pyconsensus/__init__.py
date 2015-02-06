@@ -377,58 +377,42 @@ class Oracle(object):
 
     def interpolate(self, reports):
         """Uses existing data and reputations to fill missing observations.
-        Essentially a weighted average using all availiable non-NA data.
+        Weighted average/median using all available (non-nan) data.
+
         """
-        reports_new = np.ma.copy(reports)
-        if reports.mask.any():
-            
-            # Our best guess for the Event state (FALSE=0, Ambiguous=.5, TRUE=1)
-            # so far (ie, using the present, non-missing, values).
-            outcomes_raw = []
-            for i in range(reports.shape[1]):
-                
-                # The Reputation of the rows (players) who DID provide
-                # judgements, rescaled to sum to 1.
-                active_rep = self.reputation[-reports[:,i].mask]
-                active_rep[np.isnan(active_rep)] = 0
-                total_active_rep = np.sum(active_rep)
-                active_rep /= np.sum(active_rep)
+        # Rescale scaled events
+        if self.event_bounds is not None:
+            for i in range(self.num_events):
+                if self.event_bounds[i]["scaled"]:
+                    reports[:,i] = (reports[:,i] - self.event_bounds[i]["min"]) / float(self.event_bounds[i]["max"] - self.event_bounds[i]["min"])
 
-                # The relevant Event with NAs removed.
-                # ("What these row-players had to say about the Events
-                # they DID judge.")
-                active_events = reports[-reports[:,i].mask, i]
-
-                # Guess the outcome; discriminate based on contract type.
-                if not self.event_bounds[i]["scaled"]:
-                    outcome_guess = np.dot(active_events, active_rep)
+        # Interpolation to fill the missing observations
+        for j in range(self.num_events):
+            if reports[:,j].mask.any():
+                total_active_reputation = 0
+                active_reputation = []
+                active_reports = []
+                nan_indices = []
+                num_active_players = 0
+                for i in range(self.num_reports):
+                    if reports[i,j] != np.nan:
+                        total_active_reputation += self.reputation[i]
+                        active_reputation.append(self.reputation[i])
+                        active_reports.append(reports[i,j])
+                        num_active_players += 1
+                    else:
+                        nan_indices.append(i)
+                if not self.event_bounds[j]["scaled"]:
+                    guess = 0
+                    for i in range(num_active_players):
+                        active_reputation[i] /= total_active_reputation
+                        guess += active_reputation[i] * active_reports[i]
+                    guess = self.catch(guess)
                 else:
-                    outcome_guess = weighted_median(active_events.data, weights=active_rep)
-                outcomes_raw.append(outcome_guess)
-
-            # Fill in the predictions to the original M
-            na_mat = reports.mask  # Defines the slice of the matrix which needs to be edited.
-            reports_new[na_mat] = 0  # Erase the NA's
-
-            # Slightly complicated:
-            NAsToFill = np.dot(na_mat, np.diag(outcomes_raw))
-            # This builds a matrix whose columns j:
-            #   na_mat was false (the observation wasn't missing) - have a value of Zero
-            #   na_mat was true (the observation was missing)     - have a value of the jth element of EventOutcomes.Raw (the 'current best guess')
-
-            reports_new += NAsToFill
-
-            # This replaces the NAs, which were zeros, with the predicted Event outcome.
-
-            # Appropriately force the predictions into their discrete
-            # slot. (continuous variables can be gamed).
-            rows, cols = reports_new.shape
-            for i in range(rows):
-                for j in range(cols):
-                    if not self.event_bounds[j]["scaled"]:
-                        reports_new[i][j] = self.catch(reports_new[i][j])
-
-        return reports_new
+                    guess = weighted_median(active_reports, weights=active_reputation)
+                for nan_index in nan_indices:
+                    reports[nan_index,j] = guess
+        return reports
 
     def consensus(self):
         """PCA-based consensus algorithm.
@@ -437,20 +421,8 @@ class Oracle(object):
           dict: consensus results
 
         """
-        scaled_reports = np.ma.copy(self.reports)
-        if self.event_bounds is not None:
-            # Forces a matrix of raw (user-supplied) information
-            # (for example, # of House Seats, or DJIA) to conform to
-            # SVD-appropriate range.
-            #
-            # Practically, this is done by subtracting min and dividing by
-            # scaled-range (which itself is max-min).
-            for i in range(self.num_events):
-                if self.event_bounds[i]["scaled"]:
-                    scaled_reports[:,i] = (scaled_reports[:,i] - self.event_bounds[i]["min"]) / float(self.event_bounds[i]["max"] - self.event_bounds[i]["min"])
-
         # Handle missing values
-        reports_filled = self.interpolate(scaled_reports)
+        reports_filled = self.interpolate(self.reports)
         # print("reports filled:")
         # print(reports_filled.data)
 
