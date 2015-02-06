@@ -107,8 +107,8 @@ reports, reputation, players, correct_answers = generate_data(collusion)
 A = pyconsensus.Oracle(reports=reports, reputation=reputation)[:consensus]()
 vtrue, beats = oracle_results(A, players)
 
-correctness = A["events"]["outcome_final"] .== correct_answers'
+correctness = A["events"]["outcome_final"] .== correct_answers
 num_correct = countnz(correctness)
-display([A["events"]["outcome_final"] correct_answers' correctness])
+display([A["events"]["outcome_final"] correct_answers correctness])
 
 println("correct answers: ", num_correct, "/", num_events, " (", num_correct/num_events*100, "%)")

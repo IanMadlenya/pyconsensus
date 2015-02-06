@@ -11,18 +11,18 @@ Usage:
 
     # Example report matrix:
     #   - each row represents a reporter
-    #   - each column represents a event in a prediction market
-    my_reports = [[1, 1, 0, 0],
-                  [1, 0, 0, 0],
-                  [1, 1, 0, 0],
-                  [1, 1, 1, 0],
-                  [0, 0, 1, 1],
-                  [0, 0, 1, 1]]
+    #   - each column represents an event in a prediction market
+    my_reports = [[0.2, 0.7, -1, -1],
+                  [0.3, 0.5, -1, -1],
+                  [0.1, 0.7, -1, -1],
+                  [0.5, 0.7,  1, -1],
+                  [0.1, 0.2,  1,  1],
+                  [0.1, 0.2,  1,  1]]
     my_event_bounds = [
         {"scaled": True, "min": 0.1, "max": 0.5},
         {"scaled": True, "min": 0.2, "max": 0.7},
-        {"scaled": False, "min": 0, "max": 1},
-        {"scaled": False, "min": 0, "max": 1},
+        {"scaled": False, "min": -1, "max": 1},
+        {"scaled": False, "min": -1, "max": 1},
     ]
 
     oracle = Oracle(reports=my_reports, event_bounds=my_event_bounds)
@@ -191,9 +191,11 @@ class Oracle(object):
         ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
         adj_prin_comp = set1 if ref_ind <= 0 else set2
 
-        if self.verbose:
-            print "PCA loadings:"
-            print H
+        # if self.verbose:
+        print "PCA loadings:"
+        print H
+
+        sys.exit()
 
         convergence = False
 
@@ -454,12 +456,14 @@ class Oracle(object):
             inv_span = []
             for scale in self.event_bounds:
                 inv_span.append(1 / float(scale["max"] - scale["min"]))
+            print(np.array(inv_span))
 
             # Recenter
             out_matrix = np.ma.copy(self.reports)
             cols = self.reports.shape[1]
             for i in range(cols):
                 out_matrix[:,i] -= self.event_bounds[i]["min"]
+            print(np.array(out_matrix))
 
             # Rescale
             # out_matrix[np.isnan(out_matrix)] = np.mean(out_matrix)
@@ -470,15 +474,19 @@ class Oracle(object):
             scaled_reports[nan_index] = np.nan
             scaled_reports.mask[nan_index] = True
 
-            # print("scaled reports:")
-            # print(scaled_reports.data)
+            print("scaled reports:")
+            print(scaled_reports.data)
             # print(json.dumps(np.array(scaled_reports).flatten().tolist(),
             #                  indent=3,
             #                  sort_keys=True))
 
         # Handle missing values
         reports_filled = self.interpolate(scaled_reports, scaled_index)
-        # print(reports_filled.data)
+        # print(json.dumps(reports_filled.data.ravel().tolist(), indent=3))
+        print("reports filled:")
+        print(reports_filled.data)
+
+        sys.exit()
 
         # Consensus - Row Players
         # New Consensus Reward
@@ -691,6 +699,8 @@ def main(argv=None):
             #                     [-1, -1,  1,  1 ],
             #                     [-1, -1,  1,  1 ]])
             # reputation = [1, 1, 1, 1, 1, 1]
+            # oracle = Oracle(reports=reports)
+            # A = oracle.consensus()
             reports = np.array([[ 1,  1, -1, -1, 233, 16027.59],
                                 [ 1, -1, -1, -1, 199,   np.nan],
                                 [ 1,  1, -1, -1, 233, 16027.59],

@@ -99,7 +99,6 @@ function generate_data(collusion)
     # end
 
     ~VERBOSE || display([players reports])
-    display([players reports])
 
     (reports, ones(num_players), players, correct_answers)
 end
@@ -133,16 +132,17 @@ function consensus(reports, reputation, players, algo)
         # "beats" are liars that escaped punishment
         exp_vtrue, exp_beats = oracle_results(A, players)
         exp_vtrue = sum(exp_vtrue)
+        exp_outcome_final = A["events"]["outcome_final"]
 
         # Reference (e.g., without ICA)
-        ref_vtrue, ref_beats = oracle_results(
-            pyconsensus.Oracle(reports=reports,
-                               reputation=reputation)[:consensus](),
-            players,
-        )
+        ref_A = pyconsensus.Oracle(reports=reports, reputation=reputation)[:consensus]()
+        ref_vtrue, ref_beats = oracle_results(ref_A, players)
         ref_vtrue = sum(ref_vtrue)
+        ref_outcome_final = ref_A["events"]["outcome_final"]
+        # display(ref_outcome_final)
+        # display(exp_outcome_final)
         (ref_vtrue == nothing) ? nothing :
-            (ref_vtrue, exp_vtrue, exp_vtrue - ref_vtrue, exp_beats, ref_beats)
+            (ref_vtrue, exp_vtrue, exp_vtrue - ref_vtrue, ref_beats, exp_beats, ref_outcome_final, exp_outcome_final)
     end
 end
 
@@ -152,18 +152,26 @@ function simulate(algo, collusion)
     difference = (Float64)[]
     ref_beats = (Float64)[]
     exp_beats = (Float64)[]
+    ref_correct = (Float64)[]
+    exp_correct = (Float64)[]
     iterate = (Int64)[]
     i = 1
     players = []
     while i <= ITERMAX
         reports, reputation, players, correct_answers = generate_data(collusion)
         result = consensus(reports, reputation, players, algo)
+        ref_correctness = result[6] .== correct_answers
+        ref_percent_correct = countnz(ref_correctness) / num_events * 100
+        exp_correctness = result[7] .== correct_answers
+        exp_percent_correct = countnz(exp_correctness) / num_events * 100
         if result != nothing
             push!(ref_vtrue, result[1])
             push!(exp_vtrue, result[2])
             push!(difference, result[3])
             push!(ref_beats, result[4])
             push!(exp_beats, result[5])
+            # push!(ref_correct, ref_percent_correct)
+            # push!(exp_correct, exp_percent_correct)
             push!(iterate, i)
             if VERBOSE
                 (i == ITERMAX) || (i % 10 == 0) ? println('.') : print('.')
@@ -184,7 +192,8 @@ function simulate(algo, collusion)
         println(round(median(difference), 6), " +/- ", round(std(difference), 6))
     end
 
-    map(median, (ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference))
+    map(median, (ref_vtrue, ref_beats, exp_vtrue, exp_beats,
+                 difference, ref_correct, exp_correct))
 end
 
 # Sensitivity analysis
@@ -193,6 +202,8 @@ function sensitivity(algo)
     exp_vtrue_median = (Float64)[]
     ref_beats_median = (Float64)[]
     exp_beats_median = (Float64)[]
+    ref_correct_median = (Float64)[]
+    exp_correct_median = (Float64)[]
     difference_median = (Float64)[]
 
     # Collusion parameter:
@@ -200,35 +211,47 @@ function sensitivity(algo)
     collude_range = 0:0.2:1
     for c = collude_range
         println("collude: ", c)
-        ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference = simulate(algo, c)
-        push!(ref_vtrue_median, ref_vtrue)
-        push!(ref_beats_median, ref_beats)
-        push!(exp_vtrue_median, exp_vtrue)
-        push!(exp_beats_median, exp_beats)
-        push!(difference_median, difference)
+        ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct = simulate(algo, c)
+        display(ref_correct)
+        # push!(ref_vtrue_median, ref_vtrue)
+        # push!(ref_beats_median, ref_beats)
+        # push!(exp_vtrue_median, exp_vtrue)
+        # push!(exp_beats_median, exp_beats)
+        # push!(ref_correct_median, ref_correct)
+        # push!(exp_correct_median, exp_correct)
+        # push!(difference_median, difference)
     end
 
-    ~VERBOSE || println("Building plot...")
+    # ~VERBOSE || println("Building plot...")
 
-    # Plot vtrue values vs collusion parameter
-    pl_vtrue = plot(layer(x=collude_range, y=ref_vtrue_median,
-                          Geom.line, color=["reference"]),
-                    layer(x=collude_range, y=exp_vtrue_median,
-                          Geom.line, color=["experimental"]),
-                    layer(x=collude_range, y=difference_median,
-                          Geom.line, color=["difference"]),
-                    Guide.XLabel("collusion"), Guide.YLabel("reward"))
-    pl_vtrue_file = string("sens_vtrue_", algo, ".svg")
-    draw(SVG(pl_vtrue_file, 12inch, 6inch), pl_vtrue)
+    # # Plot vtrue values vs collusion parameter
+    # pl_vtrue = plot(layer(x=collude_range, y=ref_vtrue_median,
+    #                       Geom.line, color=["reference"]),
+    #                 layer(x=collude_range, y=exp_vtrue_median,
+    #                       Geom.line, color=["experimental"]),
+    #                 layer(x=collude_range, y=difference_median,
+    #                       Geom.line, color=["difference"]),
+    #                 Guide.XLabel("collusion"), Guide.YLabel("reward"))
+    # pl_vtrue_file = string("sens_vtrue_", algo, ".svg")
+    # draw(SVG(pl_vtrue_file, 12inch, 6inch), pl_vtrue)
 
-    # Plot beats values vs collusion parameter
-    pl_beats = plot(layer(x=collude_range, y=ref_beats_median,
-                          Geom.line, color=["reference"]),
-                    layer(x=collude_range, y=exp_beats_median,
-                          Geom.line, color=["experimental"]),
-                    Guide.XLabel("collusion"), Guide.YLabel("beats"))
-    pl_beats_file = string("sens_beats_", algo, ".svg")
-    draw(SVG(pl_beats_file, 12inch, 6inch), pl_beats)
+    # # Plot beats values vs collusion parameter
+    # pl_beats = plot(layer(x=collude_range, y=ref_beats_median,
+    #                       Geom.line, color=["reference"]),
+    #                 layer(x=collude_range, y=exp_beats_median,
+    #                       Geom.line, color=["experimental"]),
+    #                 Guide.XLabel("collusion"), Guide.YLabel("beats"))
+    # pl_beats_file = string("sens_beats_", algo, ".svg")
+    # draw(SVG(pl_beats_file, 12inch, 6inch), pl_beats)
+
+    # # Plot % correct vs collusion parameter
+    # pl_correct = plot(layer(x=collude_range, y=ref_correct_median,
+    #                         Geom.line, color=["reference"]),
+    #                   layer(x=collude_range, y=exp_correct_median,
+    #                         Geom.line, color=["experimental"]),
+    #                   Guide.XLabel("collusion"), Guide.YLabel("percent correct answers"))
+    # pl_correct_file = string("sens_vtrue_", algo, ".svg")
+    # draw(SVG(pl_correct_file, 12inch, 6inch), pl_correct)
 end
 
 for algo in ("fixed_threshold", "inverse_scores", "ica",
