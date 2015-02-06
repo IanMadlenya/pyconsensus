@@ -36,6 +36,7 @@ import getopt
 import json
 import warnings
 from pprint import pprint
+from copy import deepcopy
 import numpy as np
 import pandas as pd
 from scipy import signal
@@ -191,11 +192,9 @@ class Oracle(object):
         ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
         adj_prin_comp = set1 if ref_ind <= 0 else set2
 
-        # if self.verbose:
-        print "PCA loadings:"
-        print H
-
-        sys.exit()
+        if self.verbose:
+            print "PCA loadings:"
+            print H
 
         convergence = False
 
@@ -376,7 +375,7 @@ class Oracle(object):
             "convergence": convergence,
         }
 
-    def interpolate(self, reports, scaled_index):
+    def interpolate(self, reports):
         """Uses existing data and reputations to fill missing observations.
         Essentially a weighted average using all availiable non-NA data.
         """
@@ -401,7 +400,7 @@ class Oracle(object):
                 active_events = reports[-reports[:,i].mask, i]
 
                 # Guess the outcome; discriminate based on contract type.
-                if not scaled_index[i]:
+                if not self.event_bounds[i]["scaled"]:
                     outcome_guess = np.dot(active_events, active_rep)
                 else:
                     outcome_guess = weighted_median(active_events.data, weights=active_rep)
@@ -426,7 +425,7 @@ class Oracle(object):
             rows, cols = reports_new.shape
             for i in range(rows):
                 for j in range(cols):
-                    if not scaled_index[j]:
+                    if not self.event_bounds[j]["scaled"]:
                         reports_new[i][j] = self.catch(reports_new[i][j])
 
         return reports_new
@@ -438,55 +437,22 @@ class Oracle(object):
           dict: consensus results
 
         """
-        # Fill the default scales (binary) if none are provided.
-        # (Discriminate based on contract type)
-        if self.event_bounds is None:
-            scaled_index = [False] * self.reports.shape[1]
-            scaled_reports = self.reports
-        else:
+        scaled_reports = np.ma.copy(self.reports)
+        if self.event_bounds is not None:
             # Forces a matrix of raw (user-supplied) information
             # (for example, # of House Seats, or DJIA) to conform to
             # SVD-appropriate range.
             #
             # Practically, this is done by subtracting min and dividing by
             # scaled-range (which itself is max-min).
-            scaled_index = [scale["scaled"] for scale in self.event_bounds]
-
-            # Calculate multiplicative factors
-            inv_span = []
-            for scale in self.event_bounds:
-                inv_span.append(1 / float(scale["max"] - scale["min"]))
-            print(np.array(inv_span))
-
-            # Recenter
-            out_matrix = np.ma.copy(self.reports)
-            cols = self.reports.shape[1]
-            for i in range(cols):
-                out_matrix[:,i] -= self.event_bounds[i]["min"]
-            print(np.array(out_matrix))
-
-            # Rescale
-            # out_matrix[np.isnan(out_matrix)] = np.mean(out_matrix)
-            nan_index = np.isnan(out_matrix)
-            out_matrix[nan_index] = 0
-
-            scaled_reports = np.dot(out_matrix, np.diag(inv_span))
-            scaled_reports[nan_index] = np.nan
-            scaled_reports.mask[nan_index] = True
-
-            print("scaled reports:")
-            print(scaled_reports.data)
-            # print(json.dumps(np.array(scaled_reports).flatten().tolist(),
-            #                  indent=3,
-            #                  sort_keys=True))
+            for i in range(self.num_events):
+                if self.event_bounds[i]["scaled"]:
+                    scaled_reports[:,i] = (scaled_reports[:,i] - self.event_bounds[i]["min"]) / float(self.event_bounds[i]["max"] - self.event_bounds[i]["min"])
 
         # Handle missing values
-        reports_filled = self.interpolate(scaled_reports, scaled_index)
-        # print(json.dumps(reports_filled.data.ravel().tolist(), indent=3))
-        print("reports filled:")
-        print(reports_filled.data)
-
-        sys.exit()
+        reports_filled = self.interpolate(scaled_reports)
+        # print("reports filled:")
+        # print(reports_filled.data)
 
         # Consensus - Row Players
         # New Consensus Reward
@@ -501,23 +467,24 @@ class Oracle(object):
         outcomes_raw = np.dot(player_info['smooth_rep'], reports_filled).squeeze()
 
         # Discriminate Based on Contract Type
-        for i in range(reports_filled.shape[1]):
-            # Our Current best-guess for this Scaled Event (weighted median)
-            if scaled_index[i]:
-                outcomes_raw[i] = weighted_median(reports_filled[:,i],
-                                                  player_info["smooth_rep"].ravel())
+        if self.event_bounds is not None:
+            for i in range(reports_filled.shape[1]):
+                # Our Current best-guess for this Scaled Event (weighted median)
+                if self.event_bounds[i]["scaled"]:
+                    outcomes_raw[i] = weighted_median(reports_filled[:,i],
+                                                      player_info["smooth_rep"].ravel())
 
         # The Outcome (Discriminate Based on Contract Type)
         outcome_adj = []
         for i, raw in enumerate(outcomes_raw):
             outcome_adj.append(self.catch(raw))
-            if scaled_index[i]:
+            if self.event_bounds is not None and self.event_bounds[i]["scaled"]:
                 outcome_adj[i] = raw
 
         outcome_final = []
         for i, raw in enumerate(outcomes_raw):
             outcome_final.append(outcome_adj[i])
-            if scaled_index[i]:
+            if self.event_bounds is not None and self.event_bounds[i]["scaled"]:
                 outcome_final[i] *= self.event_bounds[i]["max"] - self.event_bounds[i]["min"]
                 outcome_final[i] += self.event_bounds[i]["min"]
 
