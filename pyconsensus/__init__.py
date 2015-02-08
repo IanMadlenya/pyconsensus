@@ -81,7 +81,7 @@ class Oracle(object):
         self.max_row = max_row
         self.alpha = alpha
         self.verbose = verbose
-        self.num_reports = len(reports)
+        self.num_players = len(reports)
         self.num_events = len(reports[0])
         self.run_ica = run_ica
         self.run_fixed_threshold = run_fixed_threshold
@@ -90,8 +90,8 @@ class Oracle(object):
         self.run_ica_prewhitened = run_ica_prewhitened
         if reputation is None:
             self.weighted = False
-            self.total_rep = self.num_reports
-            self.reputation = np.array([1 / float(self.num_reports)] * self.num_reports)
+            self.total_rep = self.num_players
+            self.reputation = np.array([1 / float(self.num_players)] * self.num_players)
             self.rep_coins = (np.copy(self.reputation) * 10**6).astype(int)
             self.total_rep_coins = sum(self.rep_coins)
         else:
@@ -167,7 +167,7 @@ class Oracle(object):
 
         return covariance_matrix, mean_deviation
 
-    def get_reward_weights(self, reports_filled):
+    def weighted_pca(self, reports_filled):
         """Calculates new reputations using a weighted Principal Component
         Analysis (PCA).
         
@@ -356,9 +356,9 @@ class Oracle(object):
 
         if self.verbose:
             print('=== FROM SINGULAR VALUE DECOMPOSITION OF WEIGHTED COVARIANCE MATRIX ===')
-            print(pd.DataFrame(SVD[0].data))
-            pprint(SVD[1])
-            print(pd.DataFrame(SVD[2].data))
+            print(pd.DataFrame(H[0].data))
+            pprint(H[1])
+            print(pd.DataFrame(H[2].data))
 
             print('=== FIRST EIGENVECTOR ===')
             print(first_loading)
@@ -393,22 +393,24 @@ class Oracle(object):
                 active_reputation = []
                 active_reports = []
                 nan_indices = []
-                num_active_players = 0
-                for i in range(self.num_reports):
+                num_present = 0
+                for i in range(self.num_players):
                     if reports[i,j] != np.nan:
                         total_active_reputation += self.reputation[i]
                         active_reputation.append(self.reputation[i])
                         active_reports.append(reports[i,j])
-                        num_active_players += 1
+                        num_present += 1
                     else:
                         nan_indices.append(i)
                 if not self.event_bounds[j]["scaled"]:
                     guess = 0
-                    for i in range(num_active_players):
+                    for i in range(num_present):
                         active_reputation[i] /= total_active_reputation
                         guess += active_reputation[i] * active_reports[i]
                     guess = self.catch(guess)
                 else:
+                    for i in range(num_present):
+                        active_reputation[i] /= total_active_reputation
                     guess = weighted_median(active_reports, weights=active_reputation)
                 for nan_index in nan_indices:
                     reports[nan_index,j] = guess
@@ -423,12 +425,10 @@ class Oracle(object):
         """
         # Handle missing values
         reports_filled = self.interpolate(self.reports)
-        # print("reports filled:")
-        # print(reports_filled.data)
 
         # Consensus - Row Players
         # New Consensus Reward
-        player_info = self.get_reward_weights(reports_filled)
+        player_info = self.weighted_pca(reports_filled)
         adj_first_loadings = player_info['first_loading']
 
         # Column Players (The Event Creators)
@@ -443,32 +443,64 @@ class Oracle(object):
             for i in range(reports_filled.shape[1]):
                 # Our Current best-guess for this Scaled Event (weighted median)
                 if self.event_bounds[i]["scaled"]:
-                    outcomes_raw[i] = weighted_median(reports_filled[:,i],
-                                                      player_info["smooth_rep"].ravel())
+                    outcomes_raw[i] = weighted_median(reports_filled[:,i].data, weights=player_info["smooth_rep"].ravel().data)
 
         # The Outcome (Discriminate Based on Contract Type)
-        outcome_adj = []
+        outcomes_adj = []
         for i, raw in enumerate(outcomes_raw):
-            outcome_adj.append(self.catch(raw))
             if self.event_bounds is not None and self.event_bounds[i]["scaled"]:
-                outcome_adj[i] = raw
+                outcomes_adj.append(raw)
+            else:
+                outcomes_adj.append(self.catch(raw))
 
-        outcome_final = []
+        outcomes_final = []
         for i, raw in enumerate(outcomes_raw):
-            outcome_final.append(outcome_adj[i])
+            outcomes_final.append(outcomes_adj[i])
             if self.event_bounds is not None and self.event_bounds[i]["scaled"]:
-                outcome_final[i] *= self.event_bounds[i]["max"] - self.event_bounds[i]["min"]
-                outcome_final[i] += self.event_bounds[i]["min"]
+                outcomes_final[i] *= self.event_bounds[i]["max"] - self.event_bounds[i]["min"]
+                outcomes_final[i] += self.event_bounds[i]["min"]
 
-        # .5 is obviously undesireable, this function travels from 0 to 1
-        # with a minimum at .5
+        # print "Outcomes (raw):"
+        # print outcomes_raw
+
+        # print "Outcomes (adjusted):"
+        # print outcomes_adj
+
+        # print "Outcomes (final):"
+        # print outcomes_final
+
+        # smooth_rep = player_info["smooth_rep"].data
+        # print "smooth_rep:"
+        # print smooth_rep
+        # certainty = []
+        # rf = reports_filled.data.ravel()
+        # i = 0
+        # while i < self.num_events:
+        #     j = 0
+        #     certainty.extend([0])
+        #     while j < self.num_players:
+        #         # assert(rf[i + j*self.num_events] == reports_filled.data[j][i])
+        #         if abs(rf[i + j*self.num_events] - outcomes_adj[i]) < 10**(-12):
+        #             certainty[i] += smooth_rep[j]
+        #             print "event", i, "player", j, "|", smooth_rep[j]
+        #         j += 1
+        #     i += 1
+        # print "certainty:"
+        # print certainty
+
         certainty = []
-        for i, adj in enumerate(outcome_adj):
+        for i, adj in enumerate(outcomes_adj):
             certainty.append(sum(player_info["smooth_rep"][reports_filled[:,i] == adj]))
+
         certainty = np.array(certainty)
+        # print "certainty:"
+        # print certainty
 
         # Grading Authors on a curve.
         consensus_reward = self.get_weight(certainty)
+        # print "Consensus reward:"
+        # print consensus_reward
+        # sys.exit()
 
         # How well did beliefs converge?
         avg_certainty = np.mean(certainty)
@@ -527,8 +559,8 @@ class Oracle(object):
                 'NAs Filled': na_mat.sum(axis=0).data.tolist(),
                 'participation_columns': participation_columns.data.tolist(),
                 'author_bonus': author_bonus.data.tolist(),
-                'outcome_adjusted': outcome_adj,
-                'outcome_final': outcome_final,
+                'outcomes_adjusted': outcomes_adj,
+                'outcomes_final': outcomes_final,
                 },
             'participation': 1 - percent_na,
             'avg_certainty': avg_certainty,
@@ -536,7 +568,6 @@ class Oracle(object):
         }
 
 def main(argv=None):
-    np.set_printoptions(linewidth=500)
     if argv is None:
         argv = sys.argv
     try:
