@@ -248,7 +248,7 @@ function sensitivity(algo)
                       layer(x=collude_range, y=exp_correct_median,
                             Geom.line, color=["experimental"]),
                       Guide.XLabel("collusion"), Guide.YLabel("percent correct answers"))
-    pl_correct_file = string("sens_vtrue_", algo, ".svg")
+    pl_correct_file = string("sens_correct_", algo, ".svg")
     draw(SVG(pl_correct_file, 12inch, 6inch), pl_correct)
 end
 

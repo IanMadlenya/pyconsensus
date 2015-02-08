@@ -28,7 +28,7 @@ To upgrade your pyconsensus installation, use::
 Usage
 ^^^^^
 
-To use pyconsensus, import the Oracle class::
+To use pyconsensus, import the Oracle class:
 
 .. code-block:: python
 
@@ -37,12 +37,12 @@ To use pyconsensus, import the Oracle class::
     # Example report matrix:
     #   - each row represents a reporter
     #   - each column represents an event in a prediction market
-    my_reports = [[0.2, 0.7, -1, -1],
-                  [0.3, 0.5, -1, -1],
-                  [0.1, 0.7, -1, -1],
-                  [0.5, 0.7,  1, -1],
-                  [0.1, 0.2,  1,  1],
-                  [0.1, 0.2,  1,  1]]
+    my_reports = [[ 0.2,  0.7,  -1,  -1 ],
+                  [ 0.3,  0.5,  -1,  -1 ],
+                  [ 0.1,  0.7,  -1,  -1 ],
+                  [ 0.5,  0.7,   1,  -1 ],
+                  [ 0.1,  0.2,   1,   1 ],
+                  [ 0.1,  0.2,   1,   1 ]]
     my_event_bounds = [
         {"scaled": True, "min": 0.1, "max": 0.5},
         {"scaled": True, "min": 0.2, "max": 0.7},
