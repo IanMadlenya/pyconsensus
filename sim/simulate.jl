@@ -144,7 +144,7 @@ function consensus(reports, reputation, players, algo)
         ref_vtrue, ref_beats = oracle_results(ref_A, players)
         ref_vtrue = sum(ref_vtrue)
         ref_outcome_final = ref_A["events"]["outcomes_final"]
-        display([ref_outcome_final exp_outcome_final ref_outcome_final .== exp_outcome_final])
+        ~VERBOSE || display([ref_outcome_final exp_outcome_final ref_outcome_final .== exp_outcome_final])
         (ref_vtrue == nothing) ? nothing :
             (ref_vtrue, exp_vtrue, exp_vtrue - ref_vtrue, ref_beats, exp_beats, ref_outcome_final, exp_outcome_final)
     end
@@ -169,7 +169,7 @@ function simulate(algo, collusion)
             ref_percent_correct = countnz(ref_correctness) / num_events * 100
             exp_correctness = result[7] .== correct_answers
             exp_percent_correct = countnz(exp_correctness) / num_events * 100
-            if ref_percent_correct != exp_percent_correct
+            if VERBOSE && ref_percent_correct != exp_percent_correct
                 println("ref_percent_correct: ", ref_percent_correct)
                 println("exp_percent_correct: ", exp_percent_correct)
             end

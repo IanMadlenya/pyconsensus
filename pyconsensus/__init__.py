@@ -208,14 +208,6 @@ class Oracle(object):
             #     else:
             #         net_score += Sigma[i] * score
             #     if var_exp > threshold: break
-            length = 0
-            for i, var_exp in enumerate(variance_explained):
-                loading = U.T[i]
-                score = Sigma[i] * np.dot(mean_deviation, loading)
-                length += score**2
-                if var_exp > threshold: break
-            print i, "components"
-            length = np.sqrt(length)
 
             # set1 = net_score + np.abs(np.min(net_score))
             # set2 = net_score - np.max(net_score)
@@ -225,6 +217,18 @@ class Oracle(object):
 
             # ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
             # net_adj_prin_comp = set1 if ref_ind <= 0 else set2
+
+            length = 0
+            for i, var_exp in enumerate(variance_explained):
+                loading = U.T[i]
+                score = Sigma[i] * np.dot(mean_deviation, loading)
+                length += score**2
+                if var_exp > threshold: break
+
+            if self.verbose:
+                print i, "components"
+
+            length = np.sqrt(length)
 
             net_adj_prin_comp = 1 / np.abs(length)
             net_adj_prin_comp /= np.sum(net_adj_prin_comp)
