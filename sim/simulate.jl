@@ -164,9 +164,9 @@ function simulate(algo, collusion)
             ref_correctness = result[6] .== correct_answers
             ref_percent_correct = countnz(ref_correctness) / num_events * 100
             println("ref_percent_correct: ", ref_percent_correct)
-            println("exp_percent_correct: ", exp_percent_correct)
             exp_correctness = result[7] .== correct_answers
             exp_percent_correct = countnz(exp_correctness) / num_events * 100
+            println("exp_percent_correct: ", exp_percent_correct)
             push!(ref_vtrue, result[1])
             push!(exp_vtrue, result[2])
             push!(difference, result[3])
