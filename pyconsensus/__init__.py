@@ -92,14 +92,10 @@ class Oracle(object):
             self.weighted = False
             self.total_rep = self.num_players
             self.reputation = np.array([1 / float(self.num_players)] * self.num_players)
-            self.rep_coins = (np.copy(self.reputation) * 10**6).astype(int)
-            self.total_rep_coins = sum(self.rep_coins)
         else:
             self.weighted = True
             self.total_rep = sum(np.array(reputation).ravel())
             self.reputation = np.array([i / float(self.total_rep) for i in reputation])
-            self.rep_coins = (np.abs(np.copy(reputation)) * 10**6).astype(int)
-            self.total_rep_coins = sum(self.rep_coins)
 
     def get_weight(self, v):
         """Takes an array, and returns proportional distance from zero."""
@@ -199,7 +195,7 @@ class Oracle(object):
         convergence = False
 
         if self.run_fixed_threshold:
-            threshold = 0.75
+            threshold = 0.9
 
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
@@ -218,6 +214,7 @@ class Oracle(object):
                 score = Sigma[i] * np.dot(mean_deviation, loading)
                 length += score**2
                 if var_exp > threshold: break
+            print i, "components"
             length = np.sqrt(length)
 
             # set1 = net_score + np.abs(np.min(net_score))
@@ -231,6 +228,9 @@ class Oracle(object):
 
             net_adj_prin_comp = 1 / np.abs(length)
             net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+
+            # print "net_adj_prin_comp (fixed):"
+            # print net_adj_prin_comp
 
             convergence = True
 
@@ -359,10 +359,15 @@ class Oracle(object):
                     net_adj_prin_comp = adj_prin_comp
         else:
             net_adj_prin_comp = adj_prin_comp
+            # print "net_adj_prin_comp (ref):"
+            # print net_adj_prin_comp
 
         row_reward_weighted = self.reputation
         if max(abs(net_adj_prin_comp)) != 0:
             row_reward_weighted = self.get_weight(net_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+
+        # print "row_reward_weighted:"
+        # print row_reward_weighted
 
         if self.verbose:
             print('=== FROM SINGULAR VALUE DECOMPOSITION OF WEIGHTED COVARIANCE MATRIX ===')
@@ -377,6 +382,7 @@ class Oracle(object):
             print(first_score)
 
         smooth_rep = self.alpha*row_reward_weighted + (1-self.alpha)*self.reputation.T
+
         return {
             "first_loading": first_loading,
             "old_rep": self.reputation.T,
@@ -472,10 +478,8 @@ class Oracle(object):
 
         # print "Outcomes (raw):"
         # print outcomes_raw
-
         # print "Outcomes (adjusted):"
         # print outcomes_adj
-
         # print "Outcomes (final):"
         # print outcomes_final
 
@@ -508,9 +512,6 @@ class Oracle(object):
 
         # Grading Authors on a curve.
         consensus_reward = self.get_weight(certainty)
-        # print "Consensus reward:"
-        # print consensus_reward
-        # sys.exit()
 
         # How well did beliefs converge?
         avg_certainty = np.mean(certainty)

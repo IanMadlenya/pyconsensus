@@ -66,37 +66,37 @@ function generate_data(collusion)
     #       of being equal to other liars' answers)
     reports[liars,:] = convert(Array{Float64,2}, rand(-1:1, num_liars, num_events))
 
-    # # Collusion
-    # for i = 1:num_liars-1
-
-    #     # Pairs
-    #     diceroll = first(rand(1))
-    #     if diceroll < collusion
-    #         reports[liars[i],:] = reports[liars[i+1],:]
-
-    #         # Triples
-    #         if i + 2 < num_liars
-    #             if diceroll < collusion^2
-    #                 reports[liars[i],:] = reports[liars[i+2],:]
-    #             end
-
-    #             # Quadruples
-    #             if i + 3 < num_liars
-    #                 if diceroll < collusion^3
-    #                     reports[liars[i],:] = reports[liars[i+3],:]
-    #                 end
-    #             end
-    #         end
-    #     end
-    # end
-
-    # All-or-nothing collusion ("conspiracy")
+    # Collusion
     for i = 1:num_liars-1
+
+        # Pairs
         diceroll = first(rand(1))
         if diceroll < collusion
-            reports[liars[i],:] = reports[liars[1],:]
+            reports[liars[i],:] = reports[liars[i+1],:]
+
+            # Triples
+            if i + 2 < num_liars
+                if diceroll < collusion^2
+                    reports[liars[i],:] = reports[liars[i+2],:]
+                end
+
+                # Quadruples
+                if i + 3 < num_liars
+                    if diceroll < collusion^3
+                        reports[liars[i],:] = reports[liars[i+3],:]
+                    end
+                end
+            end
         end
     end
+
+    # # All-or-nothing collusion ("conspiracy")
+    # for i = 1:num_liars-1
+    #     diceroll = first(rand(1))
+    #     if diceroll < collusion
+    #         reports[liars[i],:] = reports[liars[1],:]
+    #     end
+    # end
 
     ~VERBOSE || display([players reports])
 
@@ -108,22 +108,27 @@ function consensus(reports, reputation, players, algo)
     # Experimental (e.g., with ICA)
     if algo == "fixed_threshold"
         A = pyconsensus.Oracle(reports=reports,
+                               alpha=1.0,
                                reputation=reputation,
-                               run_ica=true)[:consensus]()
+                               run_fixed_threshold=true)[:consensus]()
     elseif algo == "inverse_scores"
         A = pyconsensus.Oracle(reports=reports,
+                               alpha=1.0,
                                reputation=reputation,
                                run_inverse_scores=true)[:consensus]()
     elseif algo == "ica"
         A = pyconsensus.Oracle(reports=reports,
+                               alpha=1.0,
                                reputation=reputation,
                                run_ica=true)[:consensus]()
     elseif algo == "ica_inverse_scores"
         A = pyconsensus.Oracle(reports=reports,
+                               alpha=1.0,
                                reputation=reputation,
                                run_ica_inverse_scores=true)[:consensus]()
     elseif algo == "ica_prewhitened"
         A = pyconsensus.Oracle(reports=reports,
+                               alpha=1.0,
                                reputation=reputation,
                                run_ica_prewhitened=true)[:consensus]()
     end
@@ -135,12 +140,11 @@ function consensus(reports, reputation, players, algo)
         exp_outcome_final = A["events"]["outcomes_final"]
 
         # Reference (e.g., without ICA)
-        ref_A = pyconsensus.Oracle(reports=reports, reputation=reputation)[:consensus]()
+        ref_A = pyconsensus.Oracle(reports=reports, reputation=reputation, alpha=1.0)[:consensus]()
         ref_vtrue, ref_beats = oracle_results(ref_A, players)
         ref_vtrue = sum(ref_vtrue)
         ref_outcome_final = ref_A["events"]["outcomes_final"]
-        # display(ref_outcome_final)
-        # display(exp_outcome_final)
+        display([ref_outcome_final exp_outcome_final ref_outcome_final .== exp_outcome_final])
         (ref_vtrue == nothing) ? nothing :
             (ref_vtrue, exp_vtrue, exp_vtrue - ref_vtrue, ref_beats, exp_beats, ref_outcome_final, exp_outcome_final)
     end
@@ -163,10 +167,12 @@ function simulate(algo, collusion)
         if result != nothing
             ref_correctness = result[6] .== correct_answers
             ref_percent_correct = countnz(ref_correctness) / num_events * 100
-            println("ref_percent_correct: ", ref_percent_correct)
             exp_correctness = result[7] .== correct_answers
             exp_percent_correct = countnz(exp_correctness) / num_events * 100
-            println("exp_percent_correct: ", exp_percent_correct)
+            if ref_percent_correct != exp_percent_correct
+                println("ref_percent_correct: ", ref_percent_correct)
+                println("exp_percent_correct: ", exp_percent_correct)
+            end
             push!(ref_vtrue, result[1])
             push!(exp_vtrue, result[2])
             push!(difference, result[3])
