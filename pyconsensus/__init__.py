@@ -195,7 +195,7 @@ class Oracle(object):
         convergence = False
 
         if self.run_fixed_threshold:
-            threshold = 0.9
+            threshold = 0.75
 
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
@@ -209,15 +209,6 @@ class Oracle(object):
             #         net_score += Sigma[i] * score
             #     if var_exp > threshold: break
 
-            # set1 = net_score + np.abs(np.min(net_score))
-            # set2 = net_score - np.max(net_score)
-            # old = np.dot(self.reputation.T, reports_filled)
-            # new1 = np.dot(self.get_weight(set1), reports_filled)
-            # new2 = np.dot(self.get_weight(set2), reports_filled)
-
-            # ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-            # net_adj_prin_comp = set1 if ref_ind <= 0 else set2
-
             length = 0
             for i, var_exp in enumerate(variance_explained):
                 loading = U.T[i]
@@ -230,8 +221,17 @@ class Oracle(object):
 
             length = np.sqrt(length)
 
-            net_adj_prin_comp = 1 / np.abs(length)
-            net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+            # net_adj_prin_comp = 1 / np.abs(length)
+            # net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+
+            set1 = length + np.abs(np.min(length))
+            set2 = length - np.max(length)
+            old = np.dot(self.reputation.T, reports_filled)
+            new1 = np.dot(self.get_weight(set1), reports_filled)
+            new2 = np.dot(self.get_weight(set2), reports_filled)
+
+            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+            net_adj_prin_comp = set1 if ref_ind <= 0 else set2
 
             # print "net_adj_prin_comp (fixed):"
             # print net_adj_prin_comp
