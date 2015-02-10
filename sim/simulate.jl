@@ -11,12 +11,13 @@ num_events = 100
 num_players = 50
 
 LIAR_THRESHOLD = 0.75
-DISTORT_THRESHOLD = 0.9
+DISTORT_THRESHOLD = 0.75
 
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
-    vtrue = this_rep - this_rep[first(find(players .== "true"))]
-
+    # display(this_rep)
+    true_idx = first(find(players .== "true"))
+    vtrue = this_rep - this_rep[true_idx]
     if VERBOSE
         old_rep = A["agents"]["old_rep"]        # previous reputation
         smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
@@ -29,7 +30,6 @@ function oracle_results(A, players)
         names!(df2, colnames2)
         display(df2)
     end
-
     (vtrue, sum(vtrue[players .== "liar"] .> 0))
 end
 
@@ -163,6 +163,9 @@ function simulate(algo, collusion)
     players = []
     while i <= ITERMAX
         reports, reputation, players, correct_answers = generate_data(collusion)
+        while ~("true" in players && "liar" in players)
+            reports, reputation, players, correct_answers = generate_data(collusion)
+        end
         result = consensus(reports, reputation, players, algo)
         if result != nothing
             ref_correctness = result[6] .== correct_answers
@@ -215,7 +218,7 @@ function sensitivity(algo)
 
     # Collusion parameter:
     # 0.6 = 60% chance that liars' lies will be identical
-    collude_range = 0:0.1:1
+    collude_range = 0:0.05:1
     for c = collude_range
         println("collude: ", c)
         ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct = simulate(algo, c)

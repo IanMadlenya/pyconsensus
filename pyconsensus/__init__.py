@@ -195,7 +195,7 @@ class Oracle(object):
         convergence = False
 
         if self.run_fixed_threshold:
-            threshold = 0.75
+            threshold = 0.85
 
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
@@ -221,17 +221,17 @@ class Oracle(object):
 
             length = np.sqrt(length)
 
-            # net_adj_prin_comp = 1 / np.abs(length)
-            # net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+            net_adj_prin_comp = 1 / np.abs(length)
+            net_adj_prin_comp /= np.sum(net_adj_prin_comp)
 
-            set1 = length + np.abs(np.min(length))
-            set2 = length - np.max(length)
-            old = np.dot(self.reputation.T, reports_filled)
-            new1 = np.dot(self.get_weight(set1), reports_filled)
-            new2 = np.dot(self.get_weight(set2), reports_filled)
+            # set1 = length + np.abs(np.min(length))
+            # set2 = length - np.max(length)
+            # old = np.dot(self.reputation.T, reports_filled)
+            # new1 = np.dot(self.get_weight(set1), reports_filled)
+            # new2 = np.dot(self.get_weight(set2), reports_filled)
 
-            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-            net_adj_prin_comp = set1 if ref_ind <= 0 else set2
+            # ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+            # net_adj_prin_comp = set1 if ref_ind <= 0 else set2
 
             # print "net_adj_prin_comp (fixed):"
             # print net_adj_prin_comp
@@ -254,11 +254,11 @@ class Oracle(object):
             convergence = True
 
         elif self.run_ica:
-            ica = FastICA(n_components=self.num_events, whiten=True)
-            # ica = FastICA(n_components=self.num_events,
-            #               whiten=True,
-            #               random_state=0,
-            #               max_iter=1000)
+            # ica = FastICA(n_components=self.num_events, whiten=True)
+            ica = FastICA(n_components=self.num_events,
+                          whiten=False,
+                          random_state=0,
+                          max_iter=1000)
             with warnings.catch_warnings(record=True) as w:
                 try:
                     S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
