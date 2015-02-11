@@ -192,9 +192,9 @@ function simulate(algo, collusion, liar_threshold, variance_threshold)
             push!(ref_correct, ref_percent_correct)
             push!(exp_correct, exp_percent_correct)
             push!(iterate, i)
-            if VERBOSE
+            # if VERBOSE
                 (i == ITERMAX) || (i % 10 == 0) ? println('.') : print('.')
-            end
+            # end
             i += 1
         end
     end
@@ -239,8 +239,8 @@ algo = "fixed_threshold"
 # 0.6 = 60% chance that liars' lies will be identical
 collude = 0.5
 
-liar_threshold_range = 0:0.05:1
-variance_threshold_range = 0:0.05:1
+liar_threshold_range = 0.1:0.05:0.9
+variance_threshold_range = 0.1:0.05:0.9
 gridrows = length(liar_threshold_range)
 gridcols = length(variance_threshold_range)
 ref_vtrue_median = zeros(gridcols, gridrows)
