@@ -6,9 +6,9 @@ using Gadfly
 
 DISTORT = 0.0     # 0.2 = 20% chance of random incorrect answer
 VERBOSE = false
-ITERMAX = 100
-num_events = 25
-num_players = 200
+ITERMAX = 50
+num_events = 50
+num_players = 100
 
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
