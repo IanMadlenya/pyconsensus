@@ -63,14 +63,15 @@ class Oracle(object):
     def __init__(self, reports=None, event_bounds=None, reputation=None,
                  catch_tolerance=0.1, max_row=5000, alpha=0.1, verbose=False,
                  run_ica=False, run_fixed_threshold=False, run_inverse_scores=False,
-                 run_ica_prewhitened=False, run_ica_inverse_scores=False):
+                 run_ica_prewhitened=False, run_ica_inverse_scores=False,
+                 run_fixed_threshold_sum=False, variance_threshold=0.85):
         """
         Args:
           reports (list-of-lists): reports matrix; rows = reporters, columns = Events.
           event_bounds (list): list of dicts for each Event
             {
               scaled (bool): True if scalar, False if binary (boolean)
-              min (float): minimum allowed value (0 if binary)
+              min (float): minimum allowed value (-1 if binary)
               max (float): maximum allowed value (1 if binary)
             }
 
@@ -85,6 +86,9 @@ class Oracle(object):
         self.num_events = len(reports[0])
         self.run_ica = run_ica
         self.run_fixed_threshold = run_fixed_threshold
+        self.run_fixed_threshold_sum = run_fixed_threshold_sum
+        if run_fixed_threshold:
+            self.variance_threshold = variance_threshold
         self.run_inverse_scores = run_inverse_scores
         self.run_ica_inverse_scores = run_ica_inverse_scores
         self.run_ica_prewhitened = run_ica_prewhitened
@@ -104,27 +108,56 @@ class Oracle(object):
             v += 1
         return v / np.sum(v)
 
-    # def catch(self, X):
-    #     """Forces continuous values into bins at 0, 0.5, and 1"""
-    #     center = 0.5
-    #     # print X, " vs ", center, "+/-", center + self.catch_tolerance
-    #     if X < center - self.catch_tolerance:
-    #         return 0
-    #     elif X > center + self.catch_tolerance:
-    #         return 1
-    #     else:
-    #         return 0.5
-
     def catch(self, X):
         """Forces continuous values into bins at -1, 0, and 1"""
         center = 0
-        # print X, " vs ", center, "+/-", center + self.catch_tolerance
         if X < center - self.catch_tolerance:
             return -1
         elif X > center + self.catch_tolerance:
             return 1
         else:
             return 0
+
+    def interpolate(self, reports):
+        """Uses existing data and reputations to fill missing observations.
+        Weighted average/median using all available (non-nan) data.
+
+        """
+        # Rescale scaled events
+        if self.event_bounds is not None:
+            for i in range(self.num_events):
+                if self.event_bounds[i]["scaled"]:
+                    reports[:,i] = (reports[:,i] - self.event_bounds[i]["min"]) / float(self.event_bounds[i]["max"] - self.event_bounds[i]["min"])
+
+        # Interpolation to fill the missing observations
+        for j in range(self.num_events):
+            if reports[:,j].mask.any():
+                total_active_reputation = 0
+                active_reputation = []
+                active_reports = []
+                nan_indices = []
+                num_present = 0
+                for i in range(self.num_players):
+                    if reports[i,j] != np.nan:
+                        total_active_reputation += self.reputation[i]
+                        active_reputation.append(self.reputation[i])
+                        active_reports.append(reports[i,j])
+                        num_present += 1
+                    else:
+                        nan_indices.append(i)
+                if not self.event_bounds[j]["scaled"]:
+                    guess = 0
+                    for i in range(num_present):
+                        active_reputation[i] /= total_active_reputation
+                        guess += active_reputation[i] * active_reports[i]
+                    guess = self.catch(guess)
+                else:
+                    for i in range(num_present):
+                        active_reputation[i] /= total_active_reputation
+                    guess = weighted_median(active_reports, weights=active_reputation)
+                for nan_index in nan_indices:
+                    reports[nan_index,j] = guess
+        return reports
 
     def weighted_cov(self, reports_filled):
         """Weights are the number of coins people start with, so the aim of this
@@ -137,29 +170,13 @@ class Oracle(object):
                                       axis=0,
                                       weights=self.reputation.tolist())
 
-        if self.verbose:
-            print('=== INPUTS ===')
-            print(reports_filled.data)
-            print(self.reputation)
-
-            print('=== WEIGHTED MEANS ===')
-            print(weighted_mean)
-
         # Each report's difference from the mean of its event (column)
         mean_deviation = np.matrix(reports_filled - weighted_mean)
-
-        if self.verbose:
-            print('=== WEIGHTED CENTERED DATA ===')
-            print(mean_deviation)
 
         # Compute the unbiased weighted population covariance
         # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
         ssq = np.sum(self.reputation**2)
         covariance_matrix = 1/float(1 - ssq) * np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation)
-
-        if self.verbose:
-            print('=== WEIGHTED COVARIANCES ===')
-            print(covariance_matrix)
 
         return covariance_matrix, mean_deviation
 
@@ -171,6 +188,11 @@ class Oracle(object):
 
         """
         covariance_matrix, mean_deviation = self.weighted_cov(reports_filled)
+
+        #############################
+        # Reference implementation: #
+        # First principal component #
+        #############################
 
         # H is the un-normalized eigenvector matrix
         H = np.linalg.svd(covariance_matrix)[0]
@@ -184,37 +206,21 @@ class Oracle(object):
         old = np.dot(self.reputation.T, reports_filled)
         new1 = np.dot(self.get_weight(set1), reports_filled)
         new2 = np.dot(self.get_weight(set2), reports_filled)
-
         ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
         adj_prin_comp = set1 if ref_ind <= 0 else set2
-
-        if self.verbose:
-            print "PCA loadings:"
-            print H
 
         convergence = False
 
         if self.run_fixed_threshold:
-            threshold = 0.85
 
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
-            
-            # for i, var_exp in enumerate(variance_explained):
-            #     loading = U.T[i]
-            #     score = np.dot(mean_deviation, loading)
-            #     if i == 0:
-            #         net_score = Sigma[i] * score
-            #     else:
-            #         net_score += Sigma[i] * score
-            #     if var_exp > threshold: break
-
             length = 0
             for i, var_exp in enumerate(variance_explained):
                 loading = U.T[i]
                 score = Sigma[i] * np.dot(mean_deviation, loading)
                 length += score**2
-                if var_exp > threshold: break
+                if var_exp > self.variance_threshold: break
 
             if self.verbose:
                 print i, "components"
@@ -224,19 +230,32 @@ class Oracle(object):
             net_adj_prin_comp = 1 / np.abs(length)
             net_adj_prin_comp /= np.sum(net_adj_prin_comp)
 
-            # set1 = length + np.abs(np.min(length))
-            # set2 = length - np.max(length)
-            # old = np.dot(self.reputation.T, reports_filled)
-            # new1 = np.dot(self.get_weight(set1), reports_filled)
-            # new2 = np.dot(self.get_weight(set2), reports_filled)
-
-            # ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-            # net_adj_prin_comp = set1 if ref_ind <= 0 else set2
-
-            # print "net_adj_prin_comp (fixed):"
-            # print net_adj_prin_comp
-
             convergence = True
+
+        elif self.run_fixed_threshold_sum:
+
+            U, Sigma, Vt = np.linalg.svd(covariance_matrix)
+            variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
+            
+            for i, var_exp in enumerate(variance_explained):
+                loading = U.T[i]
+                score = np.dot(mean_deviation, loading)
+                if i == 0:
+                    net_score = Sigma[i] * score
+                else:
+                    net_score += Sigma[i] * score
+                if var_exp > self.variance_threshold: break
+
+            set1 = length + np.abs(np.min(length))
+            set2 = length - np.max(length)
+            old = np.dot(self.reputation.T, reports_filled)
+            new1 = np.dot(self.get_weight(set1), reports_filled)
+            new2 = np.dot(self.get_weight(set2), reports_filled)
+
+            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+            net_adj_prin_comp = set1 if ref_ind <= 0 else set2
+
+            convergence = True            
 
         elif self.run_inverse_scores:
 
@@ -254,7 +273,6 @@ class Oracle(object):
             convergence = True
 
         elif self.run_ica:
-            # ica = FastICA(n_components=self.num_events, whiten=True)
             ica = FastICA(n_components=self.num_events,
                           whiten=False,
                           random_state=0,
@@ -335,11 +353,6 @@ class Oracle(object):
 
         elif self.run_ica_inverse_scores:
             ica = FastICA(n_components=self.num_events, whiten=True)
-            # ica = FastICA(n_components=self.num_events, whiten=False)
-            # ica = FastICA(n_components=self.num_events,
-            #               whiten=True,
-            #               random_state=0,
-            #               max_iter=1000)
             with warnings.catch_warnings(record=True) as w:
                 try:
                     S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
@@ -363,27 +376,10 @@ class Oracle(object):
                     net_adj_prin_comp = adj_prin_comp
         else:
             net_adj_prin_comp = adj_prin_comp
-            # print "net_adj_prin_comp (ref):"
-            # print net_adj_prin_comp
 
         row_reward_weighted = self.reputation
         if max(abs(net_adj_prin_comp)) != 0:
             row_reward_weighted = self.get_weight(net_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
-
-        # print "row_reward_weighted:"
-        # print row_reward_weighted
-
-        if self.verbose:
-            print('=== FROM SINGULAR VALUE DECOMPOSITION OF WEIGHTED COVARIANCE MATRIX ===')
-            print(pd.DataFrame(H[0].data))
-            pprint(H[1])
-            print(pd.DataFrame(H[2].data))
-
-            print('=== FIRST EIGENVECTOR ===')
-            print(first_loading)
-
-            print('=== FIRST SCORES ===')
-            print(first_score)
 
         smooth_rep = self.alpha*row_reward_weighted + (1-self.alpha)*self.reputation.T
 
@@ -394,47 +390,6 @@ class Oracle(object):
             "smooth_rep": smooth_rep,
             "convergence": convergence,
         }
-
-    def interpolate(self, reports):
-        """Uses existing data and reputations to fill missing observations.
-        Weighted average/median using all available (non-nan) data.
-
-        """
-        # Rescale scaled events
-        if self.event_bounds is not None:
-            for i in range(self.num_events):
-                if self.event_bounds[i]["scaled"]:
-                    reports[:,i] = (reports[:,i] - self.event_bounds[i]["min"]) / float(self.event_bounds[i]["max"] - self.event_bounds[i]["min"])
-
-        # Interpolation to fill the missing observations
-        for j in range(self.num_events):
-            if reports[:,j].mask.any():
-                total_active_reputation = 0
-                active_reputation = []
-                active_reports = []
-                nan_indices = []
-                num_present = 0
-                for i in range(self.num_players):
-                    if reports[i,j] != np.nan:
-                        total_active_reputation += self.reputation[i]
-                        active_reputation.append(self.reputation[i])
-                        active_reports.append(reports[i,j])
-                        num_present += 1
-                    else:
-                        nan_indices.append(i)
-                if not self.event_bounds[j]["scaled"]:
-                    guess = 0
-                    for i in range(num_present):
-                        active_reputation[i] /= total_active_reputation
-                        guess += active_reputation[i] * active_reports[i]
-                    guess = self.catch(guess)
-                else:
-                    for i in range(num_present):
-                        active_reputation[i] /= total_active_reputation
-                    guess = weighted_median(active_reports, weights=active_reputation)
-                for nan_index in nan_indices:
-                    reports[nan_index,j] = guess
-        return reports
 
     def consensus(self):
         """PCA-based consensus algorithm.
@@ -480,44 +435,12 @@ class Oracle(object):
                 outcomes_final[i] *= self.event_bounds[i]["max"] - self.event_bounds[i]["min"]
                 outcomes_final[i] += self.event_bounds[i]["min"]
 
-        # print "Outcomes (raw):"
-        # print outcomes_raw
-        # print "Outcomes (adjusted):"
-        # print outcomes_adj
-        # print "Outcomes (final):"
-        # print outcomes_final
-
-        # smooth_rep = player_info["smooth_rep"].data
-        # print "smooth_rep:"
-        # print smooth_rep
-        # certainty = []
-        # rf = reports_filled.data.ravel()
-        # i = 0
-        # while i < self.num_events:
-        #     j = 0
-        #     certainty.extend([0])
-        #     while j < self.num_players:
-        #         # assert(rf[i + j*self.num_events] == reports_filled.data[j][i])
-        #         if abs(rf[i + j*self.num_events] - outcomes_adj[i]) < 10**(-12):
-        #             certainty[i] += smooth_rep[j]
-        #             print "event", i, "player", j, "|", smooth_rep[j]
-        #         j += 1
-        #     i += 1
-        # print "certainty:"
-        # print certainty
-
         certainty = []
         for i, adj in enumerate(outcomes_adj):
             certainty.append(sum(player_info["smooth_rep"][reports_filled[:,i] == adj]))
 
         certainty = np.array(certainty)
-        # print "certainty:"
-        # print certainty
-
-        # Grading Authors on a curve.
         consensus_reward = self.get_weight(certainty)
-
-        # How well did beliefs converge?
         avg_certainty = np.mean(certainty)
 
         # Participation
@@ -700,20 +623,6 @@ def main(argv=None):
                 { "scaled": True,  "min":  0,   "max": 435 },
                 { "scaled": True,  "min": 8000, "max": 20000 },
             ]
-            # reports = np.array([[ 1,  1,  0,  0, 233, 16027.59],
-            #                     [ 1,  0,  0,  0, 199,   np.nan],
-            #                     [ 1,  1,  0,  0, 233, 16027.59],
-            #                     [ 1,  1,  1,  0, 250,   np.nan],
-            #                     [ 0,  0,  1,  1, 435,  8001.00],
-            #                     [ 0,  0,  1,  1, 435, 19999.00]])
-            # event_bounds = [
-            #     {"scaled": False, "min": 0, "max": 1},
-            #     {"scaled": False, "min": 0, "max": 1},
-            #     {"scaled": False, "min": 0, "max": 1},
-            #     {"scaled": False, "min": 0, "max": 1},
-            #     {"scaled": True, "min": 0, "max": 435},
-            #     {"scaled": True, "min": 8000, "max": 20000},
-            # ]
             oracle = Oracle(reports=reports, event_bounds=event_bounds)
             A = oracle.consensus()
             print(pd.DataFrame(A["events"]))

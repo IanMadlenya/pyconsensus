@@ -7,13 +7,8 @@ using Gadfly
 DISTORT = 0.0     # 0.2 = 20% chance of random incorrect answer
 VERBOSE = false
 ITERMAX = 100
-num_events = 100
-num_players = 50
-
-# todo: sensitivity analysis for LIAR_THRESHOLD, DISTORT_THRESHOLD,
-# and threshold (in Oracle.weighted_pca)
-LIAR_THRESHOLD = 0.75
-DISTORT_THRESHOLD = 0.75
+num_events = 25
+num_players = 200
 
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
@@ -34,14 +29,17 @@ function oracle_results(A, players)
     (vtrue, sum(vtrue[players .== "liar"] .> 0))
 end
 
-function generate_data(collusion)
+function generate_data(collusion, liar_threshold, variance_threshold)
 
-    # 1. Generate artificial "true, distort (semi-true), liar" list
+    # simplest version: no distortion
+    distort_threshold = liar_threshold
+
+    # 1. Generate artificial "true, distort, liar" list
     honesty = rand(num_players)
     players = fill("", num_players)
-    players[honesty .>= DISTORT_THRESHOLD] = "true"
-    players[LIAR_THRESHOLD .< honesty .< DISTORT_THRESHOLD] = "distort"
-    players[honesty .<= LIAR_THRESHOLD] = "liar"
+    players[honesty .>= distort_threshold] = "true"
+    players[liar_threshold .< honesty .< distort_threshold] = "distort"
+    players[honesty .<= liar_threshold] = "liar"
 
     # 2. Build report matrix from this list
     trues = find(players .== "true")
@@ -160,7 +158,7 @@ function consensus(reports, reputation, players, algo)
     end
 end
 
-function simulate(algo, collusion)
+function simulate(algo, collusion, liar_threshold, variance_threshold)
     ref_vtrue = (Float64)[]
     exp_vtrue = (Float64)[]
     difference = (Float64)[]
@@ -172,9 +170,9 @@ function simulate(algo, collusion)
     i = 1
     players = []
     while i <= ITERMAX
-        reports, reputation, players, correct_answers = generate_data(collusion)
+        reports, reputation, players, correct_answers = generate_data(collusion, liar_threshold, variance_threshold)
         while ~("true" in players && "liar" in players)
-            reports, reputation, players, correct_answers = generate_data(collusion)
+            reports, reputation, players, correct_answers = generate_data(collusion, liar_threshold, variance_threshold)
         end
         result = consensus(reports, reputation, players, algo)
         if result != nothing
@@ -216,65 +214,89 @@ function simulate(algo, collusion)
     map(median, (ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct))
 end
 
-# Sensitivity analysis
-function sensitivity(algo)
-    ref_vtrue_median = (Float64)[]
-    exp_vtrue_median = (Float64)[]
-    ref_beats_median = (Float64)[]
-    exp_beats_median = (Float64)[]
-    ref_correct_median = (Float64)[]
-    exp_correct_median = (Float64)[]
-    difference_median = (Float64)[]
+function imshow(x, colvals, rowvals,
+                title::String="", units::String="",
+                xlabel::String="", ylabel::String="", args...)
+  is, js, values = findnz(x)
+  m, n = size(x)
+  df = DataFrames.DataFrame(i=rowvals[is], j=colvals[js], value=values)
+  plot(df, x="j", y="i", color="value",
+         Coord.cartesian(yflip=false, fixed=true)
+       , Geom.rectbin, Stat.identity
+       , Guide.title(title) , Guide.colorkey(units)
+       , Guide.XLabel(xlabel), Guide.YLabel(ylabel)
+       , Theme(panel_fill=color("black"), grid_line_width=0inch)
+       , args...)
+end
 
-    # Collusion parameter:
-    # 0.6 = 60% chance that liars' lies will be identical
-    collude_range = 0:0.05:1
-    for c = collude_range
-        println("collude: ", c)
-        ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct = simulate(algo, c)
-        push!(ref_vtrue_median, ref_vtrue)
-        push!(ref_beats_median, ref_beats)
-        push!(exp_vtrue_median, exp_vtrue)
-        push!(exp_beats_median, exp_beats)
-        push!(ref_correct_median, ref_correct)
-        push!(exp_correct_median, exp_correct)
-        push!(difference_median, difference)
+########################
+# Sensitivity analysis #
+########################  
+
+algo = "fixed_threshold"
+
+# Collusion parameter:
+# 0.6 = 60% chance that liars' lies will be identical
+collude = 0.5
+
+liar_threshold_range = 0:0.05:1
+variance_threshold_range = 0:0.05:1
+gridrows = length(liar_threshold_range)
+gridcols = length(variance_threshold_range)
+ref_vtrue_median = zeros(gridcols, gridrows)
+exp_vtrue_median = zeros(gridcols, gridrows)
+ref_beats_median = zeros(gridcols, gridrows)
+exp_beats_median = zeros(gridcols, gridrows)
+ref_correct_median = zeros(gridcols, gridrows)
+exp_correct_median = zeros(gridcols, gridrows)
+difference_median = zeros(gridcols, gridrows)
+
+for (row, liar_threshold) in enumerate(liar_threshold_range)
+    for (col, variance_threshold) in enumerate(variance_threshold_range)
+        ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct = simulate(algo, collude, liar_threshold, variance_threshold)
+        ref_vtrue_median[row,col] = ref_vtrue
+        ref_beats_median[row,col] = ref_beats
+        exp_vtrue_median[row,col] = exp_vtrue
+        exp_beats_median[row,col] = exp_beats
+        ref_correct_median[row,col] = ref_correct
+        exp_correct_median[row,col] = exp_correct
+        difference_median[row,col] = difference
     end
-
-    ~VERBOSE || println("Building plot...")
-
-    # Plot vtrue values vs collusion parameter
-    pl_vtrue = plot(layer(x=collude_range, y=ref_vtrue_median,
-                          Geom.line, color=["reference"]),
-                    layer(x=collude_range, y=exp_vtrue_median,
-                          Geom.line, color=["experimental"]),
-                    layer(x=collude_range, y=difference_median,
-                          Geom.line, color=["difference"]),
-                    Guide.XLabel("collusion"), Guide.YLabel("reward"))
-    pl_vtrue_file = string("sens_vtrue_", algo, ".svg")
-    draw(SVG(pl_vtrue_file, 12inch, 6inch), pl_vtrue)
-
-    # Plot beats values vs collusion parameter
-    pl_beats = plot(layer(x=collude_range, y=ref_beats_median,
-                          Geom.line, color=["reference"]),
-                    layer(x=collude_range, y=exp_beats_median,
-                          Geom.line, color=["experimental"]),
-                    Guide.XLabel("collusion"), Guide.YLabel("beats"))
-    pl_beats_file = string("sens_beats_", algo, ".svg")
-    draw(SVG(pl_beats_file, 12inch, 6inch), pl_beats)
-
-    # Plot % correct vs collusion parameter
-    pl_correct = plot(layer(x=collude_range, y=ref_correct_median,
-                            Geom.line, color=["reference"]),
-                      layer(x=collude_range, y=exp_correct_median,
-                            Geom.line, color=["experimental"]),
-                      Guide.XLabel("collusion"), Guide.YLabel("percent correct answers"))
-    pl_correct_file = string("sens_correct_", algo, ".svg")
-    draw(SVG(pl_correct_file, 12inch, 6inch), pl_correct)
 end
 
-for algo in ("fixed_threshold", "inverse_scores", "ica",
-             "ica_inverse_scores", "ica_prewhitened")
-    println("Testing algo: ", algo)
-    sensitivity(algo)
-end
+# Heatmaps: paired sensitivity analysis
+variance_threshold = convert(Array, variance_threshold_range)
+percent_liars = convert(Array, liar_threshold_range) .* 100
+draw(
+    SVG(string("heatmap_vtrue_", algo, ".svg"),
+        12inch, 12inch),
+    imshow(ref_vtrue_median,
+           variance_threshold,
+           percent_liars,
+           "vs true",
+           "reward",
+           "variance threshold",
+           "% liars"),
+)
+draw(
+    SVG(string("heatmap_beats_", algo, ".svg"),
+        12inch, 12inch),
+    imshow(ref_beats_median,
+           variance_threshold,
+           percent_liars,
+           "reputation rewards",
+           "# beats",
+           "variance threshold",
+           "% liars"),
+)
+draw(
+    SVG(string("heatmap_correct_", algo, ".svg"),
+        12inch, 12inch),
+    imshow(ref_correct_median,
+           variance_threshold,
+           percent_liars,
+           "event outcomes",
+           "outcome",
+           "variance threshold",
+           "% liars"),
+)
