@@ -66,13 +66,13 @@ function generate_data(collusion, liar_threshold, variance_threshold)
     reports[liars,:] = convert(Array{Float64,2}, rand(-1:1, num_liars, num_events))
 
     # Alternate: liars always answer incorrectly
-    for i = 1:num_liars
-        for j = 1:num_events
-            while reports[liars[i],j] == correct_answers[j]
-                reports[liars[i],j] = rand(-1:1)
-            end
-        end
-    end
+    # for i = 1:num_liars
+    #     for j = 1:num_events
+    #         while reports[liars[i],j] == correct_answers[j]
+    #             reports[liars[i],j] = rand(-1:1)
+    #         end
+    #     end
+    # end
 
     # Collusion
     for i = 1:num_liars-1
@@ -264,13 +264,53 @@ for (row, liar_threshold) in enumerate(liar_threshold_range)
     end
 end
 
-# Heatmaps: paired sensitivity analysis
+############
+# Heatmaps #
+############
+
 variance_threshold = convert(Array, variance_threshold_range)
 percent_liars = convert(Array, liar_threshold_range) .* 100
+
+# Comparison to reference implementation (single-component)
+draw(
+    SVG(string("compare_heatmap_vtrue_", algo, ".svg"),
+        12inch, 12inch),
+    imshow(ref_vtrue_median - exp_vtrue_median,
+           variance_threshold,
+           percent_liars,
+           "vs true",
+           "reward",
+           "variance threshold",
+           "% liars"),
+)
+draw(
+    SVG(string("compare_heatmap_beats_", algo, ".svg"),
+        12inch, 12inch),
+    imshow(ref_beats_median - exp_beats_median,
+           variance_threshold,
+           percent_liars,
+           "liars that escaped punishment (positive = improvement vs reference)",
+           "# beats",
+           "variance threshold",
+           "% liars"),
+)
+draw(
+    SVG(string("compare_heatmap_correct_", algo, ".svg"),
+        12inch, 12inch),
+    imshow(ref_correct_median - exp_correct_median,
+           variance_threshold,
+           percent_liars,
+           "event outcomes (negative = improvement vs reference)",
+           "% correct",
+           "variance threshold",
+           "% liars"),
+)
+
+# Paired sensitivity analysis
 draw(
     SVG(string("heatmap_vtrue_", algo, ".svg"),
         12inch, 12inch),
-    imshow(ref_vtrue_median,
+    imshow(exp_vtrue_median,
            variance_threshold,
            percent_liars,
            "vs true",
@@ -281,10 +321,10 @@ draw(
 draw(
     SVG(string("heatmap_beats_", algo, ".svg"),
         12inch, 12inch),
-    imshow(ref_beats_median,
+    imshow(exp_beats_median,
            variance_threshold,
            percent_liars,
-           "reputation rewards",
+           "liars that escaped punishment",
            "# beats",
            "variance threshold",
            "% liars"),
@@ -292,11 +332,11 @@ draw(
 draw(
     SVG(string("heatmap_correct_", algo, ".svg"),
         12inch, 12inch),
-    imshow(ref_correct_median,
+    imshow(exp_correct_median,
            variance_threshold,
            percent_liars,
            "event outcomes",
-           "outcome",
+           "% correct",
            "variance threshold",
            "% liars"),
 )
