@@ -192,9 +192,9 @@ function simulate(algo, collusion, liar_threshold, variance_threshold)
             push!(ref_correct, ref_percent_correct)
             push!(exp_correct, exp_percent_correct)
             push!(iterate, i)
-            # if VERBOSE
+            if VERBOSE
                 (i == ITERMAX) || (i % 10 == 0) ? println('.') : print('.')
-            # end
+            end
             i += 1
         end
     end
