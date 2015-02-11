@@ -10,7 +10,7 @@ pyconsensus
 .. image:: https://badge.fury.io/py/pyconsensus.svg
     :target: http://badge.fury.io/py/pyconsensus
 
-pyconsensus is a Python implementation of the Augur/Truthcoin consensus mechanism, originally invented by Paul Sztorc: https://github.com/psztorc/Truthcoin.
+Python implementation of the Augur consensus mechanism, which is an improved version of Sztorc consensus (https://github.com/psztorc/Truthcoin).  Mathematical details can be found in Appendix A of the Augur whitepaper at http://augur.link/augur.pdf.
 
 Donations: 14sqtQRWuWqa7SCtS1iSjt1FexSxfwnw7G
 
@@ -20,10 +20,6 @@ Installation
 The easiest way to install pyconsensus is using pip::
 
     $ pip install pyconsensus
-
-To upgrade your pyconsensus installation, use::
-
-    $ pip install --upgrade --no-deps pyconsensus
 
 Usage
 ^^^^^

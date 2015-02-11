@@ -252,7 +252,9 @@ exp_correct_median = zeros(gridcols, gridrows)
 difference_median = zeros(gridcols, gridrows)
 
 for (row, liar_threshold) in enumerate(liar_threshold_range)
+    println("liar_threshold: ", liar_threshold)
     for (col, variance_threshold) in enumerate(variance_threshold_range)
+        println("  variance_threshold: ", variance_threshold)
         ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct = simulate(algo, collude, liar_threshold, variance_threshold)
         ref_vtrue_median[row,col] = ref_vtrue
         ref_beats_median[row,col] = ref_beats
