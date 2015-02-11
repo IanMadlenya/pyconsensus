@@ -10,12 +10,13 @@ ITERMAX = 100
 num_events = 100
 num_players = 50
 
+# todo: sensitivity analysis for LIAR_THRESHOLD, DISTORT_THRESHOLD,
+# and threshold (in Oracle.weighted_pca)
 LIAR_THRESHOLD = 0.75
 DISTORT_THRESHOLD = 0.75
 
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
-    # display(this_rep)
     true_idx = first(find(players .== "true"))
     vtrue = this_rep - this_rep[true_idx]
     if VERBOSE
@@ -66,37 +67,46 @@ function generate_data(collusion)
     #       of being equal to other liars' answers)
     reports[liars,:] = convert(Array{Float64,2}, rand(-1:1, num_liars, num_events))
 
-    # # Collusion
-    # for i = 1:num_liars-1
-
-    #     # Pairs
-    #     diceroll = first(rand(1))
-    #     if diceroll < collusion
-    #         reports[liars[i],:] = reports[liars[i+1],:]
-
-    #         # Triples
-    #         if i + 2 < num_liars
-    #             if diceroll < collusion^2
-    #                 reports[liars[i],:] = reports[liars[i+2],:]
-    #             end
-
-    #             # Quadruples
-    #             if i + 3 < num_liars
-    #                 if diceroll < collusion^3
-    #                     reports[liars[i],:] = reports[liars[i+3],:]
-    #                 end
-    #             end
-    #         end
-    #     end
-    # end
-
-    # All-or-nothing collusion ("conspiracy")
-    for i = 1:num_liars-1
-        diceroll = first(rand(1))
-        if diceroll < collusion
-            reports[liars[i],:] = reports[liars[1],:]
+    # Alternate: liars always answer incorrectly
+    for i = 1:num_liars
+        for j = 1:num_events
+            while reports[liars[i],j] == correct_answers[j]
+                reports[liars[i],j] = rand(-1:1)
+            end
         end
     end
+
+    # Collusion
+    for i = 1:num_liars-1
+
+        # Pairs
+        diceroll = first(rand(1))
+        if diceroll < collusion
+            reports[liars[i],:] = reports[liars[i+1],:]
+
+            # Triples
+            if i + 2 < num_liars
+                if diceroll < collusion^2
+                    reports[liars[i],:] = reports[liars[i+2],:]
+                end
+
+                # Quadruples
+                if i + 3 < num_liars
+                    if diceroll < collusion^3
+                        reports[liars[i],:] = reports[liars[i+3],:]
+                    end
+                end
+            end
+        end
+    end
+
+    # # All-or-nothing collusion ("conspiracy")
+    # for i = 1:num_liars-1
+    #     diceroll = first(rand(1))
+    #     if diceroll < collusion
+    #         reports[liars[i],:] = reports[liars[1],:]
+    #     end
+    # end
 
     ~VERBOSE || display([players reports])
 
