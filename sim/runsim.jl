@@ -31,17 +31,11 @@ function imshow(x, colvals, rowvals,
        , args...)
 end
 
-function jldload(fname="sim_2015-02-12T11:50:17.jld")
-    file = jldopen(fname, "r")
-    variance_threshold = read(file, "variance_threshold")
-    percent_liars = read(file, "percent_liars")
-    ref_vtrue_median = read(file, "ref_vtrue_median")
-    exp_vtrue_median = read(file, "exp_vtrue_median")
-    ref_beats_median = read(file, "ref_beats_median")
-    exp_beats_median = read(file, "exp_beats_median")
-    ref_correct_median = read(file, "ref_correct_median")
-    exp_correct_median = read(file, "exp_correct_median")
-    close(file)
+function jldload(fname="sim_2015-02-12T13:55:51.jld")
+    jldopen(fname, "r") do file
+        sim_data = read(file, "sim_data")
+        return sim_data
+    end
 end
 
 ########################
@@ -85,16 +79,16 @@ end
 # Save data to file #
 #####################
 
-sim_data = {
+ sim_data = [
     "variance_threshold" => convert(Array, variance_threshold_range),
     "liar_threshold" => convert(Array, liar_threshold_range),
-    "ref_vtrue_median" => ref_vtrue_median,
-    "exp_vtrue_median" => exp_vtrue_median,
-    "ref_beats_median" => ref_beats_median,
-    "exp_beats_median" => exp_beats_median,
-    "ref_correct_median" => ref_correct_median,
-    "exp_correct_median" => exp_correct_median,
-}
+    "ref_vtrue" => ref_vtrue_median,
+    "exp_vtrue" => exp_vtrue_median,
+    "ref_beats" => ref_beats_median,
+    "exp_beats" => exp_beats_median,
+    "ref_correct" => ref_correct_median,
+    "exp_correct" => exp_correct_median,
+]
 
 jldopen("sim_" * repr(now()) * ".jld", "w") do file
     write(file, "sim_data", sim_data)
@@ -106,7 +100,7 @@ end
 
 xgrid = sim_data["variance_threshold"]
 ygrid = sim_data["liar_threshold"]
-z = sim_data["exp_correct_median"]
+z = sim_data["exp_correct"]
 
 # Surface plot
 fig = figure("pyplot_surfaceplot", figsize=(10,10))
@@ -120,9 +114,9 @@ title("")
 
 # Comparison to single-component implementation
 draw(
-    SVG(string("compare_heatmap_vtrue_", algo, ".svg"),
+    SVG("compare_heatmap_vtrue_$algo.svg",
         12inch, 12inch),
-    imshow(sim_data["ref_vtrue_median"] - sim_data["exp_vtrue_median"],
+    imshow(sim_data["ref_vtrue"] - sim_data["exp_vtrue"],
            sim_data["variance_threshold"],
            sim_data["liar_threshold"],
            "vs true",
@@ -131,9 +125,9 @@ draw(
            "liar threshold"),
 )
 draw(
-    SVG(string("compare_heatmap_beats_", algo, ".svg"),
+    SVG("compare_heatmap_beats_$algo.svg",
         12inch, 12inch),
-    imshow(sim_data["ref_beats_median"] - sim_data["exp_beats_median"],
+    imshow(sim_data["ref_beats"] - sim_data["exp_beats"],
            sim_data["variance_threshold"],
            sim_data["liar_threshold"],
            "liars that escaped punishment (positive = improvement vs reference)",
@@ -142,9 +136,9 @@ draw(
            "liar threshold"),
 )
 draw(
-    SVG(string("compare_heatmap_correct_", algo, ".svg"),
+    SVG("compare_heatmap_correct_$algo.svg",
         12inch, 12inch),
-    imshow(sim_data["ref_correct_median"] - sim_data["exp_correct_median"],
+    imshow(sim_data["ref_correct"] - sim_data["exp_correct"],
            sim_data["variance_threshold"],
            sim_data["liar_threshold"],
            "event outcomes (negative = improvement vs reference)",
@@ -155,9 +149,9 @@ draw(
 
 # Paired sensitivity analysis
 draw(
-    SVG(string("heatmap_vtrue_", algo, ".svg"),
+    SVG("heatmap_vtrue_$algo.svg",
         12inch, 12inch),
-    imshow(sim_data["exp_vtrue_median"],
+    imshow(sim_data["exp_vtrue"],
            sim_data["variance_threshold"],
            sim_data["liar_threshold"],
            "vs true",
@@ -166,9 +160,9 @@ draw(
            "liar threshold"),
 )
 draw(
-    SVG(string("heatmap_beats_", algo, ".svg"),
+    SVG("heatmap_beats_$algo.svg",
         12inch, 12inch),
-    imshow(sim_data["exp_beats_median"],
+    imshow(sim_data["exp_beats"],
            sim_data["variance_threshold"],
            sim_data["liar_threshold"],
            "liars that escaped punishment",
@@ -177,9 +171,9 @@ draw(
            "liar threshold"),
 )
 draw(
-    SVG(string("heatmap_correct_", algo, ".svg"),
+    SVG("heatmap_correct_$algo.svg",
         12inch, 12inch),
-    imshow(sim_data["exp_correct_median"],
+    imshow(sim_data["exp_correct"],
            sim_data["variance_threshold"],
            sim_data["liar_threshold"],
            "event outcomes",
