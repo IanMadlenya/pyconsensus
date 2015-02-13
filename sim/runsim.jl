@@ -21,7 +21,6 @@ variance_threshold_range = 0.1:0.05:0.9
 
 # Surface plot
 function surfaceplot(xgrid, ygrid, z)
-    using PyPlot
     fig = figure("pyplot_surfaceplot", figsize=(10,10))
     ax = fig[:add_subplot](111, projection="3d")
     ax[:plot_surface](xgrid, ygrid, z,
@@ -155,17 +154,6 @@ jldopen("sim_" * repr(now()) * ".jld", "w") do file
     write(file, "sim_data", sim_data)
 end
 
-############
-# Heatmaps #
-############
-
-xgrid = repmat(sim_data["variance_threshold"]', length(sim_data["liar_threshold"]), 1)
-ygrid = repmat(sim_data["liar_threshold"], 1, length(sim_data["variance_threshold"]))
-z = sim_data["exp_correct"] - sim_data["ref_correct"]
-
-surfaceplot(xgrid, ygrid, z)
-# heatmaps()
-
 # Plot vtrue values vs liar_threshold parameter
 pl_vtrue = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_vtrue"],
                       Geom.line, color=["single component"]),
@@ -192,3 +180,16 @@ pl_correct = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_correct"],
                   Guide.XLabel("fraction liars"), Guide.YLabel("percent correct answers"))
 pl_correct_file = "sens_correct_$algo.svg"
 draw(SVG(pl_correct_file, 12inch, 6inch), pl_correct)
+
+############
+# Heatmaps #
+############
+
+using PyPlot
+
+xgrid = repmat(sim_data["variance_threshold"]', length(sim_data["liar_threshold"]), 1)
+ygrid = repmat(sim_data["liar_threshold"], 1, length(sim_data["variance_threshold"]))
+z = sim_data["exp_correct"] - sim_data["ref_correct"]
+
+surfaceplot(xgrid, ygrid, z)
+# heatmaps()
