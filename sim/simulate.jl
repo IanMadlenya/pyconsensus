@@ -74,37 +74,37 @@ function generate_data(collusion, liar_threshold, variance_threshold)
     #     end
     # end
 
-    # Collusion
-    for i = 1:num_liars-1
-
-        # Pairs
-        diceroll = first(rand(1))
-        if diceroll < collusion
-            reports[liars[i],:] = reports[liars[i+1],:]
-
-            # Triples
-            if i + 2 < num_liars
-                if diceroll < collusion^2
-                    reports[liars[i],:] = reports[liars[i+2],:]
-                end
-
-                # Quadruples
-                if i + 3 < num_liars
-                    if diceroll < collusion^3
-                        reports[liars[i],:] = reports[liars[i+3],:]
-                    end
-                end
-            end
-        end
-    end
-
-    # # All-or-nothing collusion ("conspiracy")
+    # # Collusion
     # for i = 1:num_liars-1
+
+    #     # Pairs
     #     diceroll = first(rand(1))
     #     if diceroll < collusion
-    #         reports[liars[i],:] = reports[liars[1],:]
+    #         reports[liars[i],:] = reports[liars[i+1],:]
+
+    #         # Triples
+    #         if i + 2 < num_liars
+    #             if diceroll < collusion^2
+    #                 reports[liars[i],:] = reports[liars[i+2],:]
+    #             end
+
+    #             # Quadruples
+    #             if i + 3 < num_liars
+    #                 if diceroll < collusion^3
+    #                     reports[liars[i],:] = reports[liars[i+3],:]
+    #                 end
+    #             end
+    #         end
     #     end
     # end
+
+    # All-or-nothing collusion ("conspiracy")
+    for i = 1:num_liars-1
+        diceroll = first(rand(1))
+        if diceroll < collusion
+            reports[liars[i],:] = reports[liars[1],:]
+        end
+    end
 
     ~VERBOSE || display([players reports])
 
@@ -234,8 +234,7 @@ end
 
 function jldload(fname="sim_2015-02-12T13:55:51.jld")
     jldopen(fname, "r") do file
-        sim_data = read(file, "sim_data")
-        return sim_data
+        read(file, "sim_data")
     end
 end
 
