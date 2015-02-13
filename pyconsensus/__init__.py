@@ -82,20 +82,20 @@ class Oracle(object):
         self.max_row = max_row
         self.alpha = alpha
         self.verbose = verbose
-        self.num_players = len(reports)
+        self.num_reporters = len(reports)
         self.num_events = len(reports[0])
         self.run_ica = run_ica
         self.run_fixed_threshold = run_fixed_threshold
         self.run_fixed_threshold_sum = run_fixed_threshold_sum
-        if run_fixed_threshold:
+        if run_fixed_threshold or run_fixed_threshold_sum:
             self.variance_threshold = variance_threshold
         self.run_inverse_scores = run_inverse_scores
         self.run_ica_inverse_scores = run_ica_inverse_scores
         self.run_ica_prewhitened = run_ica_prewhitened
         if reputation is None:
             self.weighted = False
-            self.total_rep = self.num_players
-            self.reputation = np.array([1 / float(self.num_players)] * self.num_players)
+            self.total_rep = self.num_reporters
+            self.reputation = np.array([1 / float(self.num_reporters)] * self.num_reporters)
         else:
             self.weighted = True
             self.total_rep = sum(np.array(reputation).ravel())
@@ -137,7 +137,7 @@ class Oracle(object):
                 active_reports = []
                 nan_indices = []
                 num_present = 0
-                for i in range(self.num_players):
+                for i in range(self.num_reporters):
                     if reports[i,j] != np.nan:
                         total_active_reputation += self.reputation[i]
                         active_reputation.append(self.reputation[i])

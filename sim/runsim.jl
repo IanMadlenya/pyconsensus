@@ -8,16 +8,11 @@ include("simulate.jl")
 
 @pyimport pyconsensus
 
-VERBOSE = false
-ITERMAX = 50
-num_events = 50
-num_players = 100
-algo = "fixed_threshold"
 # Collusion parameter:
 # 0.6 = 60% chance that liars' lies will be identical
-collude = 0.5
+collude = 0.6
 liar_threshold_range = 0.1:0.05:0.9
-variance_threshold_range = 0.1:0.05:0.9
+variance_threshold_range = 0.5:0.05:0.95
 
 # Surface plot
 function surfaceplot(xgrid, ygrid, z)
@@ -25,7 +20,8 @@ function surfaceplot(xgrid, ygrid, z)
     ax = fig[:add_subplot](111, projection="3d")
     ax[:plot_surface](xgrid, ygrid, z,
                       rstride=2, edgecolors="k", cstride=2,
-                      cmap=ColorMap("gray"), alpha=0.8, linewidth=0.25)
+                      cmap=ColorMap("gray"),
+                      alpha=0.8, linewidth=0.25)
     # ax[:plot_wireframe](xgrid, ygrid, z)
     xlabel("variance threshold")
     ylabel("liar threshold")
@@ -34,7 +30,7 @@ function surfaceplot(xgrid, ygrid, z)
 end
 
 # Comparison to single-component implementation
-function heatmaps()
+function heatmaps(algo)
     draw(
         SVG("compare_heatmap_vtrue_$algo.svg",
             12inch, 12inch),
@@ -109,6 +105,8 @@ end
 # Sensitivity analysis #
 ########################
 
+algo = "fixed_threshold"
+
 gridrows = length(liar_threshold_range)
 gridcols = length(variance_threshold_range)
 ref_vtrue_median = zeros(gridcols, gridrows)
@@ -148,34 +146,41 @@ sim_data = [
     "ref_correct" => ref_correct_median,
     "exp_correct" => exp_correct_median,
     "algo" => algo,
+    "num_reporters" => num_reporters,
+    "num_events" => num_events,
+    "collude" => collude,
+    "itermax" => ITERMAX,
 ]
 
 jldopen("sim_" * repr(now()) * ".jld", "w") do file
     write(file, "sim_data", sim_data)
 end
 
+target = last(findmax(sum(sim_data["exp_correct"] - sim_data["ref_correct"], 2)))
+# target = find(sim_data["variance_threshold"] .== 0.75)
+
 # Plot vtrue values vs liar_threshold parameter
-pl_vtrue = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_vtrue"],
+pl_vtrue = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_vtrue"][:,target],
                       Geom.line, color=["single component"]),
-                layer(x=sim_data["liar_threshold"], y=sim_data["exp_vtrue"],
+                layer(x=sim_data["liar_threshold"], y=sim_data["exp_vtrue"][:,target],
                       Geom.line, color=["multiple component"]),
                 Guide.XLabel("fraction liars"), Guide.YLabel("relative reward"))
 pl_vtrue_file = "sens_vtrue_$algo.svg"
 draw(SVG(pl_vtrue_file, 12inch, 6inch), pl_vtrue)
 
 # Plot beats values vs liar_threshold parameter
-pl_beats = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_beats"],
+pl_beats = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_beats"][:,target],
                       Geom.line, color=["single component"]),
-                layer(x=sim_data["liar_threshold"], y=sim_data["exp_beats"],
+                layer(x=sim_data["liar_threshold"], y=sim_data["exp_beats"][:,target],
                       Geom.line, color=["multiple component"]),
                 Guide.XLabel("fraction liars"), Guide.YLabel("beats"))
 pl_beats_file = "sens_beats_$algo.svg"
 draw(SVG(pl_beats_file, 12inch, 6inch), pl_beats)
 
 # Plot % correct vs liar_threshold parameter
-pl_correct = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_correct"],
+pl_correct = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_correct"][:,target],
                         Geom.line, color=["single component"]),
-                  layer(x=sim_data["liar_threshold"], y=sim_data["exp_correct"],
+                  layer(x=sim_data["liar_threshold"], y=sim_data["exp_correct"][:,target],
                         Geom.line, color=["multiple component"]),
                   Guide.XLabel("fraction liars"), Guide.YLabel("percent correct answers"))
 pl_correct_file = "sens_correct_$algo.svg"
@@ -191,5 +196,5 @@ xgrid = repmat(sim_data["variance_threshold"]', length(sim_data["liar_threshold"
 ygrid = repmat(sim_data["liar_threshold"], 1, length(sim_data["variance_threshold"]))
 z = sim_data["exp_correct"] - sim_data["ref_correct"]
 
-surfaceplot(xgrid, ygrid, z)
-# heatmaps()
+# surfaceplot(xgrid, ygrid, z)
+# heatmaps(sim_data["algo"])

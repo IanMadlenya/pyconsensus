@@ -6,9 +6,9 @@ using HDF5, JLD
 
 DISTORT = 0
 VERBOSE = false
-ITERMAX = 100
-num_events = 100
-num_players = 500
+ITERMAX = 1000
+num_events = 50
+num_reporters = 100
 
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
@@ -35,8 +35,8 @@ function generate_data(collusion, liar_threshold, variance_threshold)
     distort_threshold = liar_threshold
 
     # 1. Generate artificial "true, distort, liar" list
-    honesty = rand(num_players)
-    players = fill("", num_players)
+    honesty = rand(num_reporters)
+    players = fill("", num_reporters)
     players[honesty .>= distort_threshold] = "true"
     players[liar_threshold .< honesty .< distort_threshold] = "distort"
     players[honesty .<= liar_threshold] = "liar"
@@ -52,7 +52,7 @@ function generate_data(collusion, liar_threshold, variance_threshold)
     correct_answers = rand(-1:1, num_events)
 
     # True: always report correct answer
-    reports = zeros(num_players, num_events)
+    reports = zeros(num_reporters, num_events)
     reports[trues,:] = convert(Array{Float64,2}, repmat(correct_answers', num_trues))
 
     # Distort: sometimes report incorrect answers at random
@@ -74,41 +74,41 @@ function generate_data(collusion, liar_threshold, variance_threshold)
     #     end
     # end
 
-    # # Collusion
-    # for i = 1:num_liars-1
-
-    #     # Pairs
-    #     diceroll = first(rand(1))
-    #     if diceroll < collusion
-    #         reports[liars[i],:] = reports[liars[i+1],:]
-
-    #         # Triples
-    #         if i + 2 < num_liars
-    #             if diceroll < collusion^2
-    #                 reports[liars[i],:] = reports[liars[i+2],:]
-    #             end
-
-    #             # Quadruples
-    #             if i + 3 < num_liars
-    #                 if diceroll < collusion^3
-    #                     reports[liars[i],:] = reports[liars[i+3],:]
-    #                 end
-    #             end
-    #         end
-    #     end
-    # end
-
-    # All-or-nothing collusion ("conspiracy")
+    # Collusion
     for i = 1:num_liars-1
+
+        # Pairs
         diceroll = first(rand(1))
         if diceroll < collusion
-            reports[liars[i],:] = reports[liars[1],:]
+            reports[liars[i],:] = reports[liars[i+1],:]
+
+            # Triples
+            if i + 2 < num_liars
+                if diceroll < collusion^2
+                    reports[liars[i],:] = reports[liars[i+2],:]
+                end
+
+                # Quadruples
+                if i + 3 < num_liars
+                    if diceroll < collusion^3
+                        reports[liars[i],:] = reports[liars[i+3],:]
+                    end
+                end
+            end
         end
     end
 
+    # # All-or-nothing collusion ("conspiracy")
+    # for i = 1:num_liars-1
+    #     diceroll = first(rand(1))
+    #     if diceroll < collusion
+    #         reports[liars[i],:] = reports[liars[1],:]
+    #     end
+    # end
+
     ~VERBOSE || display([players reports])
 
-    (reports, ones(num_players), players, correct_answers)
+    (reports, ones(num_reporters), players, correct_answers)
 end
 
 function consensus(reports, reputation, players, algo, variance_threshold)
@@ -120,6 +120,12 @@ function consensus(reports, reputation, players, algo, variance_threshold)
                                reputation=reputation,
                                variance_threshold=variance_threshold,
                                run_fixed_threshold=true)[:consensus]()
+    elseif algo == "run_fixed_threshold_sum"
+        A = pyconsensus.Oracle(reports=reports,
+                               alpha=1.0,
+                               reputation=reputation,
+                               variance_threshold=variance_threshold,
+                               run_fixed_threshold_sum=true)[:consensus]()
     elseif algo == "inverse_scores"
         A = pyconsensus.Oracle(reports=reports,
                                alpha=1.0,
@@ -239,4 +245,4 @@ function jldload(fname="sim_2015-02-12T13:55:51.jld")
 end
 
 # Auto load data from REPL
-~isinteractive() || (sim_data = jldload())
+~isinteractive() || (sim_data = jldload("sim_2015-02-12T22:35:01.jld"))
