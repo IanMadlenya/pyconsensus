@@ -1,12 +1,13 @@
 using PyCall
 using DataFrames
+using HDF5, JLD
 
 @pyimport pyconsensus
 
 VERBOSE = false
-ITERMAX = 50
-num_events = 50
-num_players = 100
+ITERMAX = 100
+num_events = 100
+num_players = 500
 
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
@@ -109,13 +110,14 @@ function generate_data(collusion, liar_threshold, variance_threshold)
     (reports, ones(num_players), players, correct_answers)
 end
 
-function consensus(reports, reputation, players, algo)
+function consensus(reports, reputation, players, algo, variance_threshold)
 
     # Experimental (fixed-threshold)
     if algo == "fixed_threshold"
         A = pyconsensus.Oracle(reports=reports,
                                alpha=1.0,
                                reputation=reputation,
+                               variance_threshold=variance_threshold,
                                run_fixed_threshold=true)[:consensus]()
     elseif algo == "inverse_scores"
         A = pyconsensus.Oracle(reports=reports,
@@ -172,7 +174,7 @@ function simulate(algo, collusion, liar_threshold, variance_threshold)
         while ~("true" in players && "liar" in players)
             reports, reputation, players, correct_answers = generate_data(collusion, liar_threshold, variance_threshold)
         end
-        result = consensus(reports, reputation, players, algo)
+        result = consensus(reports, reputation, players, algo, variance_threshold)
         if result != nothing
             ref_correctness = result[6] .== correct_answers
             ref_percent_correct = countnz(ref_correctness) / num_events * 100
@@ -211,3 +213,30 @@ function simulate(algo, collusion, liar_threshold, variance_threshold)
 
     map(median, (ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct))
 end
+
+function heatmap(x, colvals, rowvals,
+                 title::String="", units::String="",
+                 xlabel::String="", ylabel::String="", args...)
+  is, js, values = findnz(x)
+  m, n = size(x)
+  df = DataFrames.DataFrame(i=rowvals[is], j=colvals[js], value=values)
+  plot(df, x="j", y="i", color="value",
+         Coord.cartesian(yflip=false, fixed=true)
+       , Geom.rectbin, Stat.identity
+       # , Scale.x_continuous(minvalue=0.5, maxvalue=n+0.5)
+       # , Scale.y_continuous(minvalue=0.5, maxvalue=m+0.5)
+       , Guide.title(title) , Guide.colorkey(units)
+       , Guide.XLabel(xlabel), Guide.YLabel(ylabel)
+       , Theme(panel_fill=color("black"), grid_line_width=0inch)
+       , args...)
+end
+
+function jldload(fname="sim_2015-02-12T13:55:51.jld")
+    jldopen(fname, "r") do file
+        sim_data = read(file, "sim_data")
+        return sim_data
+    end
+end
+
+# Auto load data from REPL
+~isinteractive() || (sim_data = jldload())

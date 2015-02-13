@@ -1,7 +1,6 @@
 using PyCall
 using DataFrames
 using Gadfly
-using PyPlot
 using Dates
 using HDF5, JLD
 
@@ -13,30 +12,6 @@ VERBOSE = false
 ITERMAX = 50
 num_events = 50
 num_players = 100
-
-function imshow(x, colvals, rowvals,
-                title::String="", units::String="",
-                xlabel::String="", ylabel::String="", args...)
-  is, js, values = findnz(x)
-  m, n = size(x)
-  df = DataFrames.DataFrame(i=rowvals[is], j=colvals[js], value=values)
-  plot(df, x="j", y="i", color="value",
-         Coord.cartesian(yflip=false, fixed=true)
-       , Geom.rectbin, Stat.identity
-       # , Scale.x_continuous(minvalue=0.5, maxvalue=n+0.5)
-       # , Scale.y_continuous(minvalue=0.5, maxvalue=m+0.5)
-       , Guide.title(title) , Guide.colorkey(units)
-       , Guide.XLabel(xlabel), Guide.YLabel(ylabel)
-       , Theme(panel_fill=color("black"), grid_line_width=0inch)
-       , args...)
-end
-
-function jldload(fname="sim_2015-02-12T13:55:51.jld")
-    jldopen(fname, "r") do file
-        sim_data = read(file, "sim_data")
-        return sim_data
-    end
-end
 
 ########################
 # Sensitivity analysis #
@@ -75,11 +50,98 @@ for (row, liar_threshold) in enumerate(liar_threshold_range)
     end
 end
 
+# Surface plot
+function surfaceplot(xgrid, ygrid, z)
+    using PyPlot
+    fig = figure("pyplot_surfaceplot", figsize=(10,10))
+    ax = fig[:add_subplot](111, projection="3d")
+    ax[:plot_surface](xgrid, ygrid, z,
+                      rstride=2, edgecolors="k", cstride=2,
+                      cmap=ColorMap("gray"), alpha=0.8, linewidth=0.25)
+    # ax[:plot_wireframe](xgrid, ygrid, z)
+    xlabel("variance threshold")
+    ylabel("liar threshold")
+    zlabel("% correct")
+    title("")
+end
+
+# Comparison to single-component implementation
+function heatmaps()
+    draw(
+        SVG("compare_heatmap_vtrue_$algo.svg",
+            12inch, 12inch),
+        imshow(sim_data["ref_vtrue"] - sim_data["exp_vtrue"],
+               sim_data["variance_threshold"],
+               sim_data["liar_threshold"],
+               "vs true",
+               "reward",
+               "variance threshold",
+               "liar threshold"),
+    )
+    draw(
+        SVG("compare_heatmap_beats_$algo.svg",
+            12inch, 12inch),
+        imshow(sim_data["ref_beats"] - sim_data["exp_beats"],
+               sim_data["variance_threshold"],
+               sim_data["liar_threshold"],
+               "liars that escaped punishment (positive = improvement vs reference)",
+               "# beats",
+               "variance threshold",
+               "liar threshold"),
+    )
+    draw(
+        SVG("compare_heatmap_correct_$algo.svg",
+            12inch, 12inch),
+        imshow(sim_data["ref_correct"] - sim_data["exp_correct"],
+               sim_data["variance_threshold"],
+               sim_data["liar_threshold"],
+               "event outcomes (negative = improvement vs reference)",
+               "% correct",
+               "variance threshold",
+               "liar threshold"),
+    )
+
+    # Paired sensitivity analysis
+    draw(
+        SVG("heatmap_vtrue_$algo.svg",
+            12inch, 12inch),
+        imshow(sim_data["exp_vtrue"],
+               sim_data["variance_threshold"],
+               sim_data["liar_threshold"],
+               "vs true",
+               "reward",
+               "variance threshold",
+               "liar threshold"),
+    )
+    draw(
+        SVG("heatmap_beats_$algo.svg",
+            12inch, 12inch),
+        imshow(sim_data["exp_beats"],
+               sim_data["variance_threshold"],
+               sim_data["liar_threshold"],
+               "liars that escaped punishment",
+               "# beats",
+               "variance threshold",
+               "liar threshold"),
+    )
+    draw(
+        SVG("heatmap_correct_$algo.svg",
+            12inch, 12inch),
+        imshow(sim_data["exp_correct"],
+               sim_data["variance_threshold"],
+               sim_data["liar_threshold"],
+               "event outcomes",
+               "% correct",
+               "variance threshold",
+               "liar threshold"),
+    )
+end
+
 #####################
 # Save data to file #
 #####################
 
- sim_data = [
+sim_data = [
     "variance_threshold" => convert(Array, variance_threshold_range),
     "liar_threshold" => convert(Array, liar_threshold_range),
     "ref_vtrue" => ref_vtrue_median,
@@ -88,6 +150,7 @@ end
     "exp_beats" => exp_beats_median,
     "ref_correct" => ref_correct_median,
     "exp_correct" => exp_correct_median,
+    "algo" => algo,
 ]
 
 jldopen("sim_" * repr(now()) * ".jld", "w") do file
@@ -98,86 +161,36 @@ end
 # Heatmaps #
 ############
 
-xgrid = sim_data["variance_threshold"]
-ygrid = sim_data["liar_threshold"]
-z = sim_data["exp_correct"]
+xgrid = repmat(sim_data["variance_threshold"]', length(sim_data["liar_threshold"]), 1)
+ygrid = repmat(sim_data["liar_threshold"], 1, length(sim_data["variance_threshold"]))
+z = sim_data["exp_correct"] - sim_data["ref_correct"]
 
-# Surface plot
-fig = figure("pyplot_surfaceplot", figsize=(10,10))
-ax = fig[:add_subplot](2,1,1, projection = "3d") 
-ax[:plot_surface](xgrid, ygrid, z,
-                  rstride=2, edgecolors="k", cstride=2,
-                  cmap=ColorMap("gray"), alpha=0.8, linewidth=0.25) 
-xlabel("variance threshold") 
-ylabel("liar threshold")
-title("")
+surfaceplot(xgrid, ygrid, z)
+# heatmaps()
 
-# Comparison to single-component implementation
-draw(
-    SVG("compare_heatmap_vtrue_$algo.svg",
-        12inch, 12inch),
-    imshow(sim_data["ref_vtrue"] - sim_data["exp_vtrue"],
-           sim_data["variance_threshold"],
-           sim_data["liar_threshold"],
-           "vs true",
-           "reward",
-           "variance threshold",
-           "liar threshold"),
-)
-draw(
-    SVG("compare_heatmap_beats_$algo.svg",
-        12inch, 12inch),
-    imshow(sim_data["ref_beats"] - sim_data["exp_beats"],
-           sim_data["variance_threshold"],
-           sim_data["liar_threshold"],
-           "liars that escaped punishment (positive = improvement vs reference)",
-           "# beats",
-           "variance threshold",
-           "liar threshold"),
-)
-draw(
-    SVG("compare_heatmap_correct_$algo.svg",
-        12inch, 12inch),
-    imshow(sim_data["ref_correct"] - sim_data["exp_correct"],
-           sim_data["variance_threshold"],
-           sim_data["liar_threshold"],
-           "event outcomes (negative = improvement vs reference)",
-           "% correct",
-           "variance threshold",
-           "liar threshold"),
-)
+# Plot vtrue values vs liar_threshold parameter
+pl_vtrue = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_vtrue"],
+                      Geom.line, color=["single component"]),
+                layer(x=sim_data["liar_threshold"], y=sim_data["exp_vtrue"],
+                      Geom.line, color=["multiple component"]),
+                Guide.XLabel("fraction liars"), Guide.YLabel("relative reward"))
+pl_vtrue_file = "sens_vtrue_$algo.svg"
+draw(SVG(pl_vtrue_file, 12inch, 6inch), pl_vtrue)
 
-# Paired sensitivity analysis
-draw(
-    SVG("heatmap_vtrue_$algo.svg",
-        12inch, 12inch),
-    imshow(sim_data["exp_vtrue"],
-           sim_data["variance_threshold"],
-           sim_data["liar_threshold"],
-           "vs true",
-           "reward",
-           "variance threshold",
-           "liar threshold"),
-)
-draw(
-    SVG("heatmap_beats_$algo.svg",
-        12inch, 12inch),
-    imshow(sim_data["exp_beats"],
-           sim_data["variance_threshold"],
-           sim_data["liar_threshold"],
-           "liars that escaped punishment",
-           "# beats",
-           "variance threshold",
-           "liar threshold"),
-)
-draw(
-    SVG("heatmap_correct_$algo.svg",
-        12inch, 12inch),
-    imshow(sim_data["exp_correct"],
-           sim_data["variance_threshold"],
-           sim_data["liar_threshold"],
-           "event outcomes",
-           "% correct",
-           "variance threshold",
-           "liar threshold"),
-)
+# Plot beats values vs liar_threshold parameter
+pl_beats = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_beats"],
+                      Geom.line, color=["single component"]),
+                layer(x=sim_data["liar_threshold"], y=sim_data["exp_beats"],
+                      Geom.line, color=["multiple component"]),
+                Guide.XLabel("fraction liars"), Guide.YLabel("beats"))
+pl_beats_file = "sens_beats_$algo.svg"
+draw(SVG(pl_beats_file, 12inch, 6inch), pl_beats)
+
+# Plot % correct vs liar_threshold parameter
+pl_correct = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_correct"],
+                        Geom.line, color=["single component"]),
+                  layer(x=sim_data["liar_threshold"], y=sim_data["exp_correct"],
+                        Geom.line, color=["multiple component"]),
+                  Guide.XLabel("fraction liars"), Guide.YLabel("percent correct answers"))
+pl_correct_file = "sens_correct_$algo.svg"
+draw(SVG(pl_correct_file, 12inch, 6inch), pl_correct)
