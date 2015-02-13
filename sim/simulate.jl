@@ -4,6 +4,7 @@ using HDF5, JLD
 
 @pyimport pyconsensus
 
+DISTORT = 0
 VERBOSE = false
 ITERMAX = 100
 num_events = 100

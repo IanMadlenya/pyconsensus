@@ -12,43 +12,12 @@ VERBOSE = false
 ITERMAX = 50
 num_events = 50
 num_players = 100
-
-########################
-# Sensitivity analysis #
-########################
-
 algo = "fixed_threshold"
-
 # Collusion parameter:
 # 0.6 = 60% chance that liars' lies will be identical
 collude = 0.5
-
 liar_threshold_range = 0.1:0.05:0.9
 variance_threshold_range = 0.1:0.05:0.9
-gridrows = length(liar_threshold_range)
-gridcols = length(variance_threshold_range)
-ref_vtrue_median = zeros(gridcols, gridrows)
-exp_vtrue_median = zeros(gridcols, gridrows)
-ref_beats_median = zeros(gridcols, gridrows)
-exp_beats_median = zeros(gridcols, gridrows)
-ref_correct_median = zeros(gridcols, gridrows)
-exp_correct_median = zeros(gridcols, gridrows)
-difference_median = zeros(gridcols, gridrows)
-
-for (row, liar_threshold) in enumerate(liar_threshold_range)
-    println("liar_threshold: ", liar_threshold)
-    for (col, variance_threshold) in enumerate(variance_threshold_range)
-        println("  variance_threshold: ", variance_threshold)
-        ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct = simulate(algo, collude, liar_threshold, variance_threshold)
-        ref_vtrue_median[row,col] = ref_vtrue
-        ref_beats_median[row,col] = ref_beats
-        exp_vtrue_median[row,col] = exp_vtrue
-        exp_beats_median[row,col] = exp_beats
-        ref_correct_median[row,col] = ref_correct
-        exp_correct_median[row,col] = exp_correct
-        difference_median[row,col] = difference
-    end
-end
 
 # Surface plot
 function surfaceplot(xgrid, ygrid, z)
@@ -135,6 +104,35 @@ function heatmaps()
                "variance threshold",
                "liar threshold"),
     )
+end
+
+########################
+# Sensitivity analysis #
+########################
+
+gridrows = length(liar_threshold_range)
+gridcols = length(variance_threshold_range)
+ref_vtrue_median = zeros(gridcols, gridrows)
+exp_vtrue_median = zeros(gridcols, gridrows)
+ref_beats_median = zeros(gridcols, gridrows)
+exp_beats_median = zeros(gridcols, gridrows)
+ref_correct_median = zeros(gridcols, gridrows)
+exp_correct_median = zeros(gridcols, gridrows)
+difference_median = zeros(gridcols, gridrows)
+
+for (row, liar_threshold) in enumerate(liar_threshold_range)
+    println("liar_threshold: ", liar_threshold)
+    for (col, variance_threshold) in enumerate(variance_threshold_range)
+        println("  variance_threshold: ", variance_threshold)
+        ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct = simulate(algo, collude, liar_threshold, variance_threshold)
+        ref_vtrue_median[row,col] = ref_vtrue
+        ref_beats_median[row,col] = ref_beats
+        exp_vtrue_median[row,col] = exp_vtrue
+        exp_beats_median[row,col] = exp_beats
+        ref_correct_median[row,col] = ref_correct
+        exp_correct_median[row,col] = exp_correct
+        difference_median[row,col] = difference
+    end
 end
 
 #####################
