@@ -9,7 +9,7 @@ using JointMoments
 
 num_events = 50
 num_reporters = 100
-ITERMAX = 500
+ITERMAX = 1000
 VARIANCE = 0.75
 DISTORT = 0
 VERBOSE = false
@@ -149,9 +149,10 @@ function simulate(collusion, liar_threshold, variance_threshold)
     i = 1
     reporters = []
     B = Dict()
-    while i <= ITERMAX
+    for algo in ALGOS
         B[algo] = Dict()
-
+    end
+    while i <= ITERMAX
         data = generate_data(
             collusion,
             liar_threshold,
@@ -161,8 +162,10 @@ function simulate(collusion, liar_threshold, variance_threshold)
         # consensus
         A = Dict()
         for algo in ALGOS
-            A[algo] = { "convergence" => false }
-            while ~A[algo]["convergence"]
+            A[algo] = Dict()
+            A[algo]["results"] = { "convergence" => false }
+            while ~A[algo]["results"]["convergence"]
+                println("    ", algo)
                 A[algo]["results"] = pyconsensus.Oracle(
                     reports=data[:reports],
                     reputation=data[:reputation],
