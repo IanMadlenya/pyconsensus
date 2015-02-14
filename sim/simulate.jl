@@ -12,23 +12,12 @@ num_events = 25
 num_reporters = 50
 
 function oracle_results(A, reporters)
-    this_rep = A["agents"]["this_rep"]          # from this round
+    this_rep = A["agents"]["this_rep"]  # from this round
     true_idx = first(find(reporters .== "true"))
 
     # percent increase/decrease vs true
     vtrue = (this_rep - this_rep[true_idx]) ./ this_rep
-    if VERBOSE
-        old_rep = A["agents"]["old_rep"]        # previous reputation
-        smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
-        df2 = convert(DataFrame, [reporters vtrue this_rep smooth_rep])
-        colnames2 = names(df2)
-        colnames2[1] = "reporter"
-        colnames2[2] = "vs true"
-        colnames2[3] = "this_rep"
-        colnames2[4] = "smooth_rep"
-        names!(df2, colnames2)
-        display(df2)
-    end
+
     liars = find(reporters .== "liar")
     (vtrue, sum(vtrue[reporters .== "liar"] .> 0) / length(liars) * 100)
 end
@@ -191,10 +180,6 @@ function simulate(algo, collusion, liar_threshold, variance_threshold)
             ref_percent_correct = countnz(ref_correctness) / num_events * 100
             exp_correctness = result[7] .== correct_answers
             exp_percent_correct = countnz(exp_correctness) / num_events * 100
-            if VERBOSE && ref_percent_correct != exp_percent_correct
-                println("ref_percent_correct: ", ref_percent_correct)
-                println("exp_percent_correct: ", exp_percent_correct)
-            end
             push!(ref_vtrue, result[1])
             push!(exp_vtrue, result[2])
             push!(difference, result[3])
@@ -210,18 +195,6 @@ function simulate(algo, collusion, liar_threshold, variance_threshold)
         end
     end
 
-    if VERBOSE
-        println("Reference:    ",
-                round(median(ref_vtrue), 6), " +/- ", round(std(ref_vtrue), 6),
-                " (", round(median(ref_beats), 6), " +/- ", round(std(ref_beats), 6), ")")
-        println("Experimental: ",
-                round(median(exp_vtrue), 6), " +/- ", round(std(exp_vtrue), 6),
-                " (", round(median(exp_beats), 6), " +/- ", round(std(exp_beats), 6), ")")
-        println("Reference vs experimental (", i-1,
-                " iterations; negative = improvement vs reference):")
-        println(round(median(difference), 6), " +/- ", round(std(difference), 6))
-    end
-
     (map(median, (ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct)),
      map(std, (ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct)))
 end
@@ -235,8 +208,6 @@ function heatmap(x, colvals, rowvals,
   plot(df, x="j", y="i", color="value",
          Coord.cartesian(yflip=false, fixed=true)
        , Geom.rectbin, Stat.identity
-       # , Scale.x_continuous(minvalue=0.5, maxvalue=n+0.5)
-       # , Scale.y_continuous(minvalue=0.5, maxvalue=m+0.5)
        , Guide.title(title) , Guide.colorkey(units)
        , Guide.XLabel(xlabel), Guide.YLabel(ylabel)
        , Theme(panel_fill=color("black"), grid_line_width=0inch)

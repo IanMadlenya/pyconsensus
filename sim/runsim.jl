@@ -91,11 +91,13 @@ variance_threshold_range = 0.5:0.1:0.9
         write(file, "sim_data", sim_data)
     end
 
+    return sim_data
+
 end
 
-sensitivity(liar_threshold_range,
-            variance_threshold_range,
-            algo="fixed_threshold")
+sim_data = sensitivity(liar_threshold_range,
+                       variance_threshold_range,
+                       algo="fixed_threshold")
 
 # include("pyplot_plots.jl")
 include("gadfly_plots.jl")
