@@ -1,7 +1,6 @@
 using PyCall
 using DataFrames
 using Dates
-using Debug
 using HDF5, JLD
 
 include("simulate.jl")
@@ -18,7 +17,7 @@ variance_threshold_range = 0.5:0.1:0.9
 # Sensitivity analysis #
 ########################
 
-@debug function sensitivity(liar_threshold_range,
+function sensitivity(liar_threshold_range,
                             variance_threshold_range;
                             algo="fixed_threshold")
 

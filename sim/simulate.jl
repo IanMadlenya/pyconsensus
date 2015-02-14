@@ -1,5 +1,6 @@
 using PyCall
 using DataFrames
+using Debug
 using HDF5, JLD
 using JointMoments
 
@@ -11,15 +12,17 @@ ITERMAX = 25
 num_events = 25
 num_reporters = 50
 
-function oracle_results(A, reporters)
+@debug function oracle_results(A, reporters)
     this_rep = A["agents"]["this_rep"]  # from this round
     true_idx = first(find(reporters .== "true"))
 
     # percent increase/decrease vs true
-    vtrue = (this_rep - this_rep[true_idx]) ./ this_rep
+    vtrue = (this_rep[true_idx] - this_rep) ./ this_rep[true_idx]
+    vtrue[isinf(vtrue)] = 100.0
 
     liars = find(reporters .== "liar")
-    (vtrue, sum(vtrue[reporters .== "liar"] .> 0) / length(liars) * 100)
+    beats = sum(vtrue[reporters .== "liar"] .> 0) / length(liars) * 100
+    (vtrue, beats)
 end
 
 function generate_data(collusion, liar_threshold, variance_threshold)
@@ -41,6 +44,20 @@ function generate_data(collusion, liar_threshold, variance_threshold)
     num_trues = length(trues)
     num_distorts = length(distorts)
     num_liars = length(liars)
+    
+    while num_trues == 0 || num_liars == 0
+        honesty = rand(num_reporters)
+        reporters = fill("", num_reporters)
+        reporters[honesty .>= distort_threshold] = "true"
+        reporters[liar_threshold .< honesty .< distort_threshold] = "distort"
+        reporters[honesty .<= liar_threshold] = "liar"
+        trues = find(reporters .== "true")
+        distorts = find(reporters .== "distort")
+        liars = find(reporters .== "liar")
+        num_trues = length(trues)
+        num_distorts = length(distorts)
+        num_liars = length(liars)
+    end
 
     correct_answers = rand(-1:1, num_events)
 
@@ -104,7 +121,7 @@ function generate_data(collusion, liar_threshold, variance_threshold)
     (reports, ones(num_reporters), reporters, correct_answers)
 end
 
-function consensus(reports, reputation, reporters, algo, variance_threshold)
+@debug function consensus(reports, reputation, reporters, algo, variance_threshold)
 
     # Experimental (fixed-threshold)
     if algo == "fixed_threshold"
@@ -171,9 +188,6 @@ function simulate(algo, collusion, liar_threshold, variance_threshold)
     reporters = []
     while i <= ITERMAX
         reports, reputation, reporters, correct_answers = generate_data(collusion, liar_threshold, variance_threshold)
-        while ~("true" in reporters && "liar" in reporters)
-            reports, reputation, reporters, correct_answers = generate_data(collusion, liar_threshold, variance_threshold)
-        end
         result = consensus(reports, reputation, reporters, algo, variance_threshold)
         if result != nothing
             ref_correctness = result[6] .== correct_answers
@@ -214,11 +228,11 @@ function heatmap(x, colvals, rowvals,
        , args...)
 end
 
-function jldload(fname="sim_2015-02-13T21:33:38.jld")
+function jldload(fname="sim_2015-02-14T00:58:15.jld")
     jldopen(fname, "r") do file
         read(file, "sim_data")
     end
 end
 
 # Auto load data from REPL
-~isinteractive() || (sim_data = jldload("sim_2015-02-13T21:33:38.jld"))
+~isinteractive() || (sim_data = jldload("sim_2015-02-14T00:58:15.jld"))
