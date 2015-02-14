@@ -11,8 +11,8 @@ include("simulate.jl")
 # Collusion parameter:
 # 0.6 = 60% chance that liars' lies will be identical
 collude = 0.6
-liar_threshold_range = 0.1:0.05:0.9
-variance_threshold_range = 0.5:0.05:0.95
+liar_threshold_range = 0.1:0.1:0.9
+variance_threshold_range = 0.5:0.1:0.9
 
 ########################
 # Sensitivity analysis #
@@ -44,30 +44,26 @@ variance_threshold_range = 0.5:0.05:0.95
         for (col, variance_threshold) in enumerate(variance_threshold_range)
             println("  variance_threshold: ", variance_threshold)
             medians, stds = simulate(algo, collude, liar_threshold, variance_threshold)
-            # println(row, " ", col)
-            try
-                ref_vtrue_median[row,col] = medians[1]
-                ref_beats_median[row,col] = medians[2]
-                exp_vtrue_median[row,col] = medians[3]
-                exp_beats_median[row,col] = medians[4]
-                difference_median[row,col] = medians[5]
-                ref_correct_median[row,col] = medians[6]
-                exp_correct_median[row,col] = medians[7]
-                ref_vtrue_std[row,col] = stds[1]
-                ref_beats_std[row,col] = stds[2]
-                exp_vtrue_std[row,col] = stds[3]
-                exp_beats_std[row,col] = stds[4]
-                difference_std[row,col] = stds[5]
-                ref_correct_std[row,col] = stds[6]
-                exp_correct_std[row,col] = stds[7]
-            catch
-                @bp
-            end
+            ref_vtrue_median[row,col] = medians[1]
+            ref_beats_median[row,col] = medians[2]
+            exp_vtrue_median[row,col] = medians[3]
+            exp_beats_median[row,col] = medians[4]
+            difference_median[row,col] = medians[5]
+            ref_correct_median[row,col] = medians[6]
+            exp_correct_median[row,col] = medians[7]
+            ref_vtrue_std[row,col] = stds[1]
+            ref_beats_std[row,col] = stds[2]
+            exp_vtrue_std[row,col] = stds[3]
+            exp_beats_std[row,col] = stds[4]
+            difference_std[row,col] = stds[5]
+            ref_correct_std[row,col] = stds[6]
+            exp_correct_std[row,col] = stds[7]
         end
     end
 end
 
-sensitivity(liar_threshold_range, variance_threshold_range)
+algo = "fixed_threshold"
+sensitivity(liar_threshold_range, variance_threshold_range, algo=algo)
 
 #####################
 # Save data to file #
