@@ -19,4 +19,4 @@ xgrid = repmat(sim_data["variance_threshold"]', length(sim_data["liar_threshold"
 ygrid = repmat(sim_data["liar_threshold"], 1, length(sim_data["variance_threshold"]))
 z = sim_data["exp_correct"] - sim_data["ref_correct"]
 
-# surfaceplot(xgrid, ygrid, z)
+surfaceplot(xgrid, ygrid, z)

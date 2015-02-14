@@ -1,6 +1,7 @@
 using PyCall
 using DataFrames
 using HDF5, JLD
+using JointMoments
 
 @pyimport pyconsensus
 
@@ -239,11 +240,11 @@ function heatmap(x, colvals, rowvals,
        , args...)
 end
 
-function jldload(fname="sim_2015-02-12T13:55:51.jld")
+function jldload(fname="sim_2015-02-13T21:33:38.jld")
     jldopen(fname, "r") do file
         read(file, "sim_data")
     end
 end
 
 # Auto load data from REPL
-# ~isinteractive() || (sim_data = jldload("sim_2015-02-12T22:35:01.jld"))
+~isinteractive() || (sim_data = jldload("sim_2015-02-13T21:33:38.jld"))
