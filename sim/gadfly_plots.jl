@@ -1,7 +1,9 @@
 using Gadfly
 
-# Comparison to single-component implementation
+# Heatmaps
 function heatmaps(algo)
+
+    # Comparison to single-component implementation
     draw(
         SVG("compare_heatmap_vtrue_$algo.svg",
             12inch, 12inch),
