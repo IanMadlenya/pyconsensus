@@ -162,11 +162,9 @@ function simulate(collusion, liar_threshold, variance_threshold)
         # consensus
         A = Dict()
         for algo in ALGOS
-            A[algo] = Dict()
-            A[algo]["results"] = { "convergence" => false }
-            while ~A[algo]["results"]["convergence"]
-                println("    ", algo)
-                A[algo]["results"] = pyconsensus.Oracle(
+            A[algo] = { "convergence" => false }
+            while ~A[algo]["convergence"]
+                A[algo] = pyconsensus.Oracle(
                     reports=data[:reports],
                     reputation=data[:reputation],
                     alpha=1.0,
@@ -176,16 +174,15 @@ function simulate(collusion, liar_threshold, variance_threshold)
 
                 # "beats" are liars that escaped punishment
                 A[algo]["vtrue"], A[algo]["beats"] = process_oracle_results(
-                    A[algo]["results"],
+                    A[algo],
                     data[:reporters],
                 )
                 A[algo]["vtrue"] = sum(A[algo]["vtrue"])
-                A[algo]["outcomes_final"] = A[algo]["results"]["events"]["outcomes_final"]
             end
             B[algo]["vtrue"] = (Float64)[]
             B[algo]["beats"] = (Float64)[]
             B[algo]["correct"] = (Float64)[]
-            correctness = B[algo]["outcomes_final"] .== data[:correct_answers]
+            correctness = A[algo]["events"]["outcomes_final"] .== data[:correct_answers]
             pct_correct = countnz(correctness) / num_events * 100
             push!(B[algo]["vtrue"], A[algo]["vtrue"])
             push!(B[algo]["beats"], A[algo]["beats"])

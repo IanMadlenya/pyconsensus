@@ -178,15 +178,15 @@ class Oracle(object):
         # Compute the unbiased weighted population covariance
         # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
         covariance_matrix = np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation) / float(1 - np.sum(self.reputation**2))
+
+        # H is the un-normalized eigenvector matrix
+        H = np.linalg.svd(covariance_matrix)[0]
+
+        # Normalize loading by Euclidean distance
+        first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
+        first_score = np.dot(mean_deviation, first_loading)
         
         if self.algorithm == "single_component":
-
-            # H is the un-normalized eigenvector matrix
-            H = np.linalg.svd(covariance_matrix)[0]
-
-            # Normalize loading by Euclidean distance
-            first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
-            first_score = np.dot(mean_deviation, first_loading)
 
             set1 = first_score + np.abs(np.min(first_score))
             set2 = first_score - np.max(first_score)
@@ -197,6 +197,7 @@ class Oracle(object):
             adj_prin_comp = set1 if ref_ind <= 0 else set2
 
             net_adj_prin_comp = adj_prin_comp
+            convergence = True
 
         elif self.algorithm == "fixed_threshold":
 
@@ -233,8 +234,8 @@ class Oracle(object):
                     net_score += Sigma[i] * score
                 if var_exp > self.variance_threshold: break
 
-            set1 = length + np.abs(np.min(length))
-            set2 = length - np.max(length)
+            set1 = net_score + np.abs(np.min(net_score))
+            set2 = net_score - np.max(net_score)
             old = np.dot(self.reputation.T, reports_filled)
             new1 = np.dot(self.get_weight(set1), reports_filled)
             new2 = np.dot(self.get_weight(set2), reports_filled)
