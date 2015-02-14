@@ -92,7 +92,7 @@ algos = [fill!(Array(String, int(length(data)/2)), "reference");
          fill!(Array(String, int(length(data)/2)), "experimental")]
 
 metrics = repmat([fill!(Array(String, gridrows), "% beats");
-                  fill!(Array(String, gridrows), "liars' reward");
+                  # fill!(Array(String, gridrows), "liars' reward");
                   fill!(Array(String, gridrows), "% correct")], 2, 1)[:]
 
 error_minus = [
