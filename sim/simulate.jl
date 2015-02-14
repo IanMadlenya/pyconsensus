@@ -6,9 +6,9 @@ using HDF5, JLD
 
 DISTORT = 0
 VERBOSE = false
-ITERMAX = 1000
-num_events = 50
-num_reporters = 100
+ITERMAX = 25
+num_events = 25
+num_reporters = 50
 
 function oracle_results(A, players)
     this_rep = A["agents"]["this_rep"]          # from this round
@@ -218,7 +218,8 @@ function simulate(algo, collusion, liar_threshold, variance_threshold)
         println(round(median(difference), 6), " +/- ", round(std(difference), 6))
     end
 
-    map(median, (ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct))
+    (map(median, (ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct)),
+     map(std, (ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct)))
 end
 
 function heatmap(x, colvals, rowvals,
@@ -245,4 +246,4 @@ function jldload(fname="sim_2015-02-12T13:55:51.jld")
 end
 
 # Auto load data from REPL
-~isinteractive() || (sim_data = jldload("sim_2015-02-12T22:35:01.jld"))
+# ~isinteractive() || (sim_data = jldload("sim_2015-02-12T22:35:01.jld"))
