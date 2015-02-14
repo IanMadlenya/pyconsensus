@@ -17,8 +17,7 @@ num_reporters = 50
     true_idx = first(find(reporters .== "true"))
 
     # percent increase/decrease vs true
-    vtrue = (this_rep[true_idx] - this_rep) ./ this_rep[true_idx]
-    vtrue[isinf(vtrue)] = 100.0
+    vtrue = this_rep[true_idx] - this_rep
 
     liars = find(reporters .== "liar")
     beats = sum(vtrue[reporters .== "liar"] .> 0) / length(liars) * 100

@@ -76,39 +76,39 @@ end
 
 algo = sim_data["algo"]
 target = last(findmax(sum(sim_data["exp_correct"] - sim_data["ref_correct"], 1)))
-num_metrics = 2
+num_metrics = 3
 gridrows = length(sim_data["liar_threshold"])
 
 liar_threshold = repmat(sim_data["liar_threshold"], 2*num_metrics, 1)[:] * 100
 
 data = [sim_data["ref_beats"][:,target];
-        # sim_data["ref_vtrue"][:,target];
+        sim_data["ref_vtrue"][:,target];
         sim_data["ref_correct"][:,target];
         sim_data["exp_beats"][:,target];
-        # sim_data["exp_vtrue"][:,target];
+        sim_data["exp_vtrue"][:,target];
         sim_data["exp_correct"][:,target]]
 
 algos = [fill!(Array(String, int(length(data)/2)), "reference");
          fill!(Array(String, int(length(data)/2)), "experimental")]
 
 metrics = repmat([fill!(Array(String, gridrows), "% beats");
-                  # fill!(Array(String, gridrows), "liars' reward");
+                  fill!(Array(String, gridrows), "liars' reward");
                   fill!(Array(String, gridrows), "% correct")], 2, 1)[:]
 
 error_minus = [
     sim_data["ref_beats"][:,target] - sim_data["ref_beats_std"][:,target],
-    # sim_data["ref_vtrue"][:,target] - sim_data["ref_vtrue_std"][:,target],
+    sim_data["ref_vtrue"][:,target] - sim_data["ref_vtrue_std"][:,target],
     sim_data["ref_correct"][:,target] - sim_data["ref_correct_std"][:,target],
     sim_data["exp_beats"][:,target] - sim_data["exp_beats_std"][:,target],
-    # sim_data["exp_vtrue"][:,target] - sim_data["exp_vtrue_std"][:,target],
+    sim_data["exp_vtrue"][:,target] - sim_data["exp_vtrue_std"][:,target],
     sim_data["exp_correct"][:,target] - sim_data["exp_correct_std"][:,target],
 ]
 error_plus = [
     sim_data["ref_beats"][:,target] + sim_data["ref_beats_std"][:,target],
-    # sim_data["ref_vtrue"][:,target] + sim_data["ref_vtrue_std"][:,target],
+    sim_data["ref_vtrue"][:,target] + sim_data["ref_vtrue_std"][:,target],
     sim_data["ref_correct"][:,target] + sim_data["ref_correct_std"][:,target],
     sim_data["exp_beats"][:,target] + sim_data["exp_beats_std"][:,target],
-    # sim_data["exp_vtrue"][:,target] + sim_data["exp_vtrue_std"][:,target],
+    sim_data["exp_vtrue"][:,target] + sim_data["exp_vtrue_std"][:,target],
     sim_data["exp_correct"][:,target] + sim_data["exp_correct_std"][:,target],
 ]
 
