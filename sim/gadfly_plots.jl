@@ -74,52 +74,62 @@ function heatmaps(algo)
     )
 end
 
-target = last(findmax(sum(sim_data["exp_correct"] - sim_data["ref_correct"], 2)))
-# target = find(sim_data["variance_threshold"] .== 0.75)
+target = last(findmax(sum(sim_data["exp_correct"] - sim_data["ref_correct"], 1)))
 
-# Plot vtrue values vs liar_threshold parameter
-ref_errbars = (sim_data["ref_vtrue"] - sim_data["ref_vtrue_std"],
-               sim_data["ref_vtrue"] + sim_data["ref_vtrue_std"])
-exp_errbars = (sim_data["exp_vtrue"] - sim_data["exp_vtrue_std"],
-               sim_data["exp_vtrue"] + sim_data["exp_vtrue_std"])
-pl_vtrue = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_vtrue"][:,target],
-                      ymin=ref_errbars[1], ymax=ref_errbars[2], 
-                      Geom.line, Geom.errorbar, color=["single component"]),
-                layer(x=sim_data["liar_threshold"], y=sim_data["exp_vtrue"][:,target],
-                      ymin=exp_errbars[1], ymax=exp_errbars[2], 
-                      Geom.line, color=["multiple component"]),
-                Guide.XLabel("fraction liars"), Guide.YLabel("relative reward"))
-pl_vtrue_file = "sens_vtrue_$algo.svg"
-draw(SVG(pl_vtrue_file, 12inch, 6inch), pl_vtrue)
+num_metrics = 3
+gridrows = length(sim_data["liar_threshold"])
 
-# Plot beats values vs liar_threshold parameter
-ref_errbars = (sim_data["ref_beats"] - sim_data["ref_beats_std"],
-               sim_data["ref_beats"] + sim_data["ref_beats_std"])
-exp_errbars = (sim_data["exp_beats"] - sim_data["exp_beats_std"],
-               sim_data["exp_beats"] + sim_data["exp_beats_std"])
-pl_beats = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_beats"][:,target],
-                      ymin=ref_errbars[1], ymax=ref_errbars[2], 
-                      Geom.line, color=["single component"]),
-                layer(x=sim_data["liar_threshold"], y=sim_data["exp_beats"][:,target],
-                      ymin=exp_errbars[1], ymax=exp_errbars[2], 
-                      Geom.line, color=["multiple component"]),
-                Guide.XLabel("fraction liars"), Guide.YLabel("beats"))
-pl_beats_file = "sens_beats_$algo.svg"
-draw(SVG(pl_beats_file, 12inch, 6inch), pl_beats)
+liar_threshold = repmat(sim_data["liar_threshold"], 2*num_metrics, 1)[:] * 100
 
-# Plot % correct vs liar_threshold parameter
-ref_errbars = (sim_data["ref_correct"] - sim_data["ref_correct_std"],
-               sim_data["ref_correct"] + sim_data["ref_correct_std"])
-exp_errbars = (sim_data["exp_correct"] - sim_data["exp_correct_std"],
-               sim_data["exp_correct"] + sim_data["exp_correct_std"])
-pl_correct = plot(layer(x=sim_data["liar_threshold"], y=sim_data["ref_correct"][:,target],
-                        ymin=ref_errbars[1], ymax=ref_errbars[2], 
-                        Geom.line, color=["single component"]),
-                  layer(x=sim_data["liar_threshold"], y=sim_data["exp_correct"][:,target],
-                        ymin=exp_errbars[1], ymax=exp_errbars[2], 
-                        Geom.line, color=["multiple component"]),
-                  Guide.XLabel("fraction liars"), Guide.YLabel("percent correct answers"))
-pl_correct_file = "sens_correct_$algo.svg"
-draw(SVG(pl_correct_file, 12inch, 6inch), pl_correct)
+data = [sim_data["ref_beats"][:,target];
+        sim_data["ref_vtrue"][:,target];
+        sim_data["ref_correct"][:,target];
+        sim_data["exp_beats"][:,target];
+        sim_data["exp_vtrue"][:,target];
+        sim_data["exp_correct"][:,target]]
+
+algos = [fill!(Array(String, int(length(data)/2)), "reference");
+         fill!(Array(String, int(length(data)/2)), "experimental")]
+
+metrics = repmat([fill!(Array(String, gridrows), "% beats");
+                  fill!(Array(String, gridrows), "liars' reward");
+                  fill!(Array(String, gridrows), "% correct")], 2, 1)[:]
+
+error_minus = [
+    sim_data["ref_beats"][:,target] - sim_data["ref_beats_std"][:,target],
+    sim_data["ref_vtrue"][:,target] - sim_data["ref_vtrue_std"][:,target],
+    sim_data["ref_correct"][:,target] - sim_data["ref_correct_std"][:,target],
+    sim_data["exp_beats"][:,target] - sim_data["exp_beats_std"][:,target],
+    sim_data["exp_vtrue"][:,target] - sim_data["exp_vtrue_std"][:,target],
+    sim_data["exp_correct"][:,target] - sim_data["exp_correct_std"][:,target],
+]
+error_plus = [
+    sim_data["ref_beats"][:,target] + sim_data["ref_beats_std"][:,target],
+    sim_data["ref_vtrue"][:,target] + sim_data["ref_vtrue_std"][:,target],
+    sim_data["ref_correct"][:,target] + sim_data["ref_correct_std"][:,target],
+    sim_data["exp_beats"][:,target] + sim_data["exp_beats_std"][:,target],
+    sim_data["exp_vtrue"][:,target] + sim_data["exp_vtrue_std"][:,target],
+    sim_data["exp_correct"][:,target] + sim_data["exp_correct_std"][:,target],
+]
+
+df = DataFrame(metric=metrics,
+               liar_threshold=liar_threshold,
+               data=data,
+               error_minus=error_minus,
+               error_plus=error_plus,
+               algorithm=algos)
+
+# Plot metrics vs liar_threshold parameter
+set_default_plot_size(12inch, 6inch)
+pl = plot(df,
+          x=:liar_threshold, y=:data,
+          ymin=:error_minus, ymax=:error_plus,
+          color=:algorithm, ygroup=:metric,
+          Guide.XLabel("% liars"), Guide.YLabel(""),
+          Geom.subplot_grid(Geom.point, Geom.line, Geom.errorbar,
+                            Guide.xticks(ticks=liar_threshold, label=false),
+                            free_y_axis=false))
+pl_file = "sens_$algo.svg"
+draw(SVG(pl_file, 12inch, 6inch), pl)
 
 # heatmaps(sim_data["algo"])

@@ -11,23 +11,26 @@ ITERMAX = 25
 num_events = 25
 num_reporters = 50
 
-function oracle_results(A, players)
+function oracle_results(A, reporters)
     this_rep = A["agents"]["this_rep"]          # from this round
-    true_idx = first(find(players .== "true"))
-    vtrue = this_rep - this_rep[true_idx]
+    true_idx = first(find(reporters .== "true"))
+
+    # percent increase/decrease vs true
+    vtrue = (this_rep - this_rep[true_idx]) ./ this_rep
     if VERBOSE
         old_rep = A["agents"]["old_rep"]        # previous reputation
         smooth_rep = A["agents"]["smooth_rep"]  # weighted sum
-        df2 = convert(DataFrame, [players vtrue this_rep smooth_rep])
+        df2 = convert(DataFrame, [reporters vtrue this_rep smooth_rep])
         colnames2 = names(df2)
-        colnames2[1] = "player"
+        colnames2[1] = "reporter"
         colnames2[2] = "vs true"
         colnames2[3] = "this_rep"
         colnames2[4] = "smooth_rep"
         names!(df2, colnames2)
         display(df2)
     end
-    (vtrue, sum(vtrue[players .== "liar"] .> 0))
+    liars = find(reporters .== "liar")
+    (vtrue, sum(vtrue[reporters .== "liar"] .> 0) / length(liars) * 100)
 end
 
 function generate_data(collusion, liar_threshold, variance_threshold)
@@ -37,15 +40,15 @@ function generate_data(collusion, liar_threshold, variance_threshold)
 
     # 1. Generate artificial "true, distort, liar" list
     honesty = rand(num_reporters)
-    players = fill("", num_reporters)
-    players[honesty .>= distort_threshold] = "true"
-    players[liar_threshold .< honesty .< distort_threshold] = "distort"
-    players[honesty .<= liar_threshold] = "liar"
+    reporters = fill("", num_reporters)
+    reporters[honesty .>= distort_threshold] = "true"
+    reporters[liar_threshold .< honesty .< distort_threshold] = "distort"
+    reporters[honesty .<= liar_threshold] = "liar"
 
     # 2. Build report matrix from this list
-    trues = find(players .== "true")
-    distorts = find(players .== "distort")
-    liars = find(players .== "liar")
+    trues = find(reporters .== "true")
+    distorts = find(reporters .== "distort")
+    liars = find(reporters .== "liar")
     num_trues = length(trues)
     num_distorts = length(distorts)
     num_liars = length(liars)
@@ -107,12 +110,12 @@ function generate_data(collusion, liar_threshold, variance_threshold)
     #     end
     # end
 
-    ~VERBOSE || display([players reports])
+    ~VERBOSE || display([reporters reports])
 
-    (reports, ones(num_reporters), players, correct_answers)
+    (reports, ones(num_reporters), reporters, correct_answers)
 end
 
-function consensus(reports, reputation, players, algo, variance_threshold)
+function consensus(reports, reputation, reporters, algo, variance_threshold)
 
     # Experimental (fixed-threshold)
     if algo == "fixed_threshold"
@@ -151,13 +154,13 @@ function consensus(reports, reputation, players, algo, variance_threshold)
 
     if A["convergence"]
         # "beats" are liars that escaped punishment
-        exp_vtrue, exp_beats = oracle_results(A, players)
+        exp_vtrue, exp_beats = oracle_results(A, reporters)
         exp_vtrue = sum(exp_vtrue)
         exp_outcome_final = A["events"]["outcomes_final"]
 
         # Reference (single-component)
         ref_A = pyconsensus.Oracle(reports=reports, reputation=reputation, alpha=1.0)[:consensus]()
-        ref_vtrue, ref_beats = oracle_results(ref_A, players)
+        ref_vtrue, ref_beats = oracle_results(ref_A, reporters)
         ref_vtrue = sum(ref_vtrue)
         ref_outcome_final = ref_A["events"]["outcomes_final"]
         ~VERBOSE || display([ref_outcome_final exp_outcome_final ref_outcome_final .== exp_outcome_final])
@@ -176,13 +179,13 @@ function simulate(algo, collusion, liar_threshold, variance_threshold)
     exp_correct = (Float64)[]
     iterate = (Int64)[]
     i = 1
-    players = []
+    reporters = []
     while i <= ITERMAX
-        reports, reputation, players, correct_answers = generate_data(collusion, liar_threshold, variance_threshold)
-        while ~("true" in players && "liar" in players)
-            reports, reputation, players, correct_answers = generate_data(collusion, liar_threshold, variance_threshold)
+        reports, reputation, reporters, correct_answers = generate_data(collusion, liar_threshold, variance_threshold)
+        while ~("true" in reporters && "liar" in reporters)
+            reports, reputation, reporters, correct_answers = generate_data(collusion, liar_threshold, variance_threshold)
         end
-        result = consensus(reports, reputation, players, algo, variance_threshold)
+        result = consensus(reports, reputation, reporters, algo, variance_threshold)
         if result != nothing
             ref_correctness = result[6] .== correct_answers
             ref_percent_correct = countnz(ref_correctness) / num_events * 100
