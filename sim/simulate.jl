@@ -1,18 +1,34 @@
 using PyCall
 using DataFrames
+using Dates
 using Debug
 using HDF5, JLD
 using JointMoments
 
 @pyimport pyconsensus
 
+num_events = 50
+num_reporters = 100
+ITERMAX = 500
+VARIANCE = 0.75
 DISTORT = 0
 VERBOSE = false
-ITERMAX = 25
-num_events = 25
-num_reporters = 50
+CONSPIRACY = false
+ALLWRONG = false
+ALGOS = [
+    "single_component",
+    "fixed_threshold",
+    "fixed_threshold_sum",
+    "inverse_scores",
+    "ica",
+    "ica_prewhitened",
+    "ica_inverse_scores",
+]
+# Collusion parameter:
+# 0.6 = 60% chance that liars' lies will be identical
+collude = 0.6
 
-@debug function oracle_results(A, reporters)
+function process_oracle_results(A, reporters)
     this_rep = A["agents"]["this_rep"]  # from this round
     true_idx = first(find(reporters .== "true"))
 
@@ -24,7 +40,7 @@ num_reporters = 50
     (vtrue, beats)
 end
 
-function generate_data(collusion, liar_threshold, variance_threshold)
+function generate_data(collusion, liar_threshold; variance_threshold=VARIANCE)
 
     # simplest version: no distortion
     distort_threshold = liar_threshold
@@ -75,156 +91,195 @@ function generate_data(collusion, liar_threshold, variance_threshold)
     reports[liars,:] = convert(Array{Float64,2}, rand(-1:1, num_liars, num_events))
 
     # Alternate: liars always answer incorrectly
-    # for i = 1:num_liars
-    #     for j = 1:num_events
-    #         while reports[liars[i],j] == correct_answers[j]
-    #             reports[liars[i],j] = rand(-1:1)
-    #         end
-    #     end
-    # end
-
-    # Collusion
-    for i = 1:num_liars-1
-
-        # Pairs
-        diceroll = first(rand(1))
-        if diceroll < collusion
-            reports[liars[i],:] = reports[liars[i+1],:]
-
-            # Triples
-            if i + 2 < num_liars
-                if diceroll < collusion^2
-                    reports[liars[i],:] = reports[liars[i+2],:]
+    if ALLWRONG
+        for i = 1:num_liars
+            for j = 1:num_events
+                while reports[liars[i],j] == correct_answers[j]
+                    reports[liars[i],j] = rand(-1:1)
                 end
+            end
+        end
+    end
 
-                # Quadruples
-                if i + 3 < num_liars
-                    if diceroll < collusion^3
-                        reports[liars[i],:] = reports[liars[i+3],:]
+    # All-or-nothing collusion ("conspiracy")
+    if CONSPIRACY
+        for i = 1:num_liars-1
+            diceroll = first(rand(1))
+            if diceroll < collusion
+                reports[liars[i],:] = reports[liars[1],:]
+            end
+        end
+
+    # "Ordinary" collusion
+    else
+        for i = 1:num_liars-1
+
+            # Pairs
+            diceroll = first(rand(1))
+            if diceroll < collusion
+                reports[liars[i],:] = reports[liars[i+1],:]
+
+                # Triples
+                if i + 2 < num_liars
+                    if diceroll < collusion^2
+                        reports[liars[i],:] = reports[liars[i+2],:]
+                    end
+
+                    # Quadruples
+                    if i + 3 < num_liars
+                        if diceroll < collusion^3
+                            reports[liars[i],:] = reports[liars[i+3],:]
+                        end
                     end
                 end
             end
         end
     end
-
-    # # All-or-nothing collusion ("conspiracy")
-    # for i = 1:num_liars-1
-    #     diceroll = first(rand(1))
-    #     if diceroll < collusion
-    #         reports[liars[i],:] = reports[liars[1],:]
-    #     end
-    # end
-
     ~VERBOSE || display([reporters reports])
-
-    (reports, ones(num_reporters), reporters, correct_answers)
+    [
+        :reports => reports,
+        :reputation => ones(num_reporters),
+        :reporters => reporters,
+        :correct_answers => correct_answers,
+    ]
 end
 
-@debug function consensus(reports, reputation, reporters, algo, variance_threshold)
-
-    # Experimental (fixed-threshold)
-    if algo == "fixed_threshold"
-        A = pyconsensus.Oracle(reports=reports,
-                               alpha=1.0,
-                               reputation=reputation,
-                               variance_threshold=variance_threshold,
-                               run_fixed_threshold=true)[:consensus]()
-    elseif algo == "run_fixed_threshold_sum"
-        A = pyconsensus.Oracle(reports=reports,
-                               alpha=1.0,
-                               reputation=reputation,
-                               variance_threshold=variance_threshold,
-                               run_fixed_threshold_sum=true)[:consensus]()
-    elseif algo == "inverse_scores"
-        A = pyconsensus.Oracle(reports=reports,
-                               alpha=1.0,
-                               reputation=reputation,
-                               run_inverse_scores=true)[:consensus]()
-    elseif algo == "ica"
-        A = pyconsensus.Oracle(reports=reports,
-                               alpha=1.0,
-                               reputation=reputation,
-                               run_ica=true)[:consensus]()
-    elseif algo == "ica_inverse_scores"
-        A = pyconsensus.Oracle(reports=reports,
-                               alpha=1.0,
-                               reputation=reputation,
-                               run_ica_inverse_scores=true)[:consensus]()
-    elseif algo == "ica_prewhitened"
-        A = pyconsensus.Oracle(reports=reports,
-                               alpha=1.0,
-                               reputation=reputation,
-                               run_ica_prewhitened=true)[:consensus]()
-    end
-
-    if A["convergence"]
-        # "beats" are liars that escaped punishment
-        exp_vtrue, exp_beats = oracle_results(A, reporters)
-        exp_vtrue = sum(exp_vtrue)
-        exp_outcome_final = A["events"]["outcomes_final"]
-
-        # Reference (single-component)
-        ref_A = pyconsensus.Oracle(reports=reports, reputation=reputation, alpha=1.0)[:consensus]()
-        ref_vtrue, ref_beats = oracle_results(ref_A, reporters)
-        ref_vtrue = sum(ref_vtrue)
-        ref_outcome_final = ref_A["events"]["outcomes_final"]
-        ~VERBOSE || display([ref_outcome_final exp_outcome_final ref_outcome_final .== exp_outcome_final])
-        (ref_vtrue == nothing) ? nothing :
-            (ref_vtrue, exp_vtrue, exp_vtrue - ref_vtrue, ref_beats, exp_beats, ref_outcome_final, exp_outcome_final)
-    end
-end
-
-function simulate(algo, collusion, liar_threshold, variance_threshold)
-    ref_vtrue = (Float64)[]
-    exp_vtrue = (Float64)[]
-    difference = (Float64)[]
-    ref_beats = (Float64)[]
-    exp_beats = (Float64)[]
-    ref_correct = (Float64)[]
-    exp_correct = (Float64)[]
+function simulate(collusion, liar_threshold, variance_threshold)
     iterate = (Int64)[]
     i = 1
     reporters = []
+    B = Dict()
     while i <= ITERMAX
-        reports, reputation, reporters, correct_answers = generate_data(collusion, liar_threshold, variance_threshold)
-        result = consensus(reports, reputation, reporters, algo, variance_threshold)
-        if result != nothing
-            ref_correctness = result[6] .== correct_answers
-            ref_percent_correct = countnz(ref_correctness) / num_events * 100
-            exp_correctness = result[7] .== correct_answers
-            exp_percent_correct = countnz(exp_correctness) / num_events * 100
-            push!(ref_vtrue, result[1])
-            push!(exp_vtrue, result[2])
-            push!(difference, result[3])
-            push!(ref_beats, result[4])
-            push!(exp_beats, result[5])
-            push!(ref_correct, ref_percent_correct)
-            push!(exp_correct, exp_percent_correct)
-            push!(iterate, i)
-            if VERBOSE
-                (i == ITERMAX) || (i % 10 == 0) ? println('.') : print('.')
+        B[algo] = Dict()
+
+        data = generate_data(
+            collusion,
+            liar_threshold,
+            variance_threshold=variance_threshold,
+        )
+
+        # consensus
+        A = Dict()
+        for algo in ALGOS
+            A[algo] = { "convergence" => false }
+            while ~A[algo]["convergence"]
+                A[algo]["results"] = pyconsensus.Oracle(
+                    reports=data[:reports],
+                    reputation=data[:reputation],
+                    alpha=1.0,
+                    variance_threshold=variance_threshold,
+                    algorithm=algo,
+                )[:consensus]()
+
+                # "beats" are liars that escaped punishment
+                A[algo]["vtrue"], A[algo]["beats"] = process_oracle_results(
+                    A[algo]["results"],
+                    data[:reporters],
+                )
+                A[algo]["vtrue"] = sum(A[algo]["vtrue"])
+                A[algo]["outcomes_final"] = A[algo]["results"]["events"]["outcomes_final"]
             end
-            i += 1
+            B[algo]["vtrue"] = (Float64)[]
+            B[algo]["beats"] = (Float64)[]
+            B[algo]["correct"] = (Float64)[]
+            correctness = B[algo]["outcomes_final"] .== data[:correct_answers]
+            pct_correct = countnz(correctness) / num_events * 100
+            push!(B[algo]["vtrue"], A[algo]["vtrue"])
+            push!(B[algo]["beats"], A[algo]["beats"])
+            push!(B[algo]["correct"], pct_correct)
+        end
+
+        push!(iterate, i)
+        if VERBOSE
+            (i == ITERMAX) || (i % 10 == 0) ? println('.') : print('.')
+        end
+        i += 1
+    end
+
+    N = sqrt(ITERMAX)
+    C = Dict()
+    for algo in ALGOS
+        C[algo] = [
+            "mean" => [
+                "vtrue" => mean(B[algo]["vtrue"]),
+                "beats" => mean(B[algo]["beats"]),
+                "correct" => mean(B[algo]["correct"]),
+            ],
+            "stderr" => [
+                "vtrue" => std(B[algo]["vtrue"]) / N,
+                "beats" => std(B[algo]["beats"]) / N,
+                "correct" => std(B[algo]["correct"]) / N,  
+            ],
+        ]
+    end
+    return C
+end
+
+function sensitivity(liar_threshold_range, variance_threshold_range)
+
+    results = Dict()
+
+    gridrows = length(liar_threshold_range)
+    gridcols = length(variance_threshold_range)
+
+    for algo in ALGOS
+        results[algo] = [
+            "mean" => [
+                "vtrue" => zeros(gridrows, gridcols),
+                "beats" => zeros(gridrows, gridcols),
+                "correct" => zeros(gridrows, gridcols),
+            ],
+            "stderr" => [
+                "vtrue" => zeros(gridrows, gridcols),
+                "beats" => zeros(gridrows, gridcols),
+                "correct" => zeros(gridrows, gridcols),
+            ]
+        ]
+    end
+
+    for (row, liar_threshold) in enumerate(liar_threshold_range)
+        println("liar_threshold: ", liar_threshold)
+        for (col, variance_threshold) in enumerate(variance_threshold_range)
+            println("  variance_threshold: ", variance_threshold)
+            C = simulate(collude, liar_threshold, variance_threshold)
+            for algo in ALGOS
+                for statistic in ("mean", "stderr")
+                    results[algo][statistic]["vtrue"][row,col] = C[algo][statistic]["vtrue"]
+                    results[algo][statistic]["beats"][row,col] = C[algo][statistic]["beats"]
+                    results[algo][statistic]["correct"][row,col] = C[algo][statistic]["correct"]
+                end
+            end
         end
     end
 
-    (map(median, (ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct)),
-     map(std, (ref_vtrue, ref_beats, exp_vtrue, exp_beats, difference, ref_correct, exp_correct)))
-end
+    #####################
+    # Save data to file #
+    #####################
 
-function heatmap(x, colvals, rowvals,
-                 title::String="", units::String="",
-                 xlabel::String="", ylabel::String="", args...)
-  is, js, values = findnz(x)
-  m, n = size(x)
-  df = DataFrames.DataFrame(i=rowvals[is], j=colvals[js], value=values)
-  plot(df, x="j", y="i", color="value",
-         Coord.cartesian(yflip=false, fixed=true)
-       , Geom.rectbin, Stat.identity
-       , Guide.title(title) , Guide.colorkey(units)
-       , Guide.XLabel(xlabel), Guide.YLabel(ylabel)
-       , Theme(panel_fill=color("black"), grid_line_width=0inch)
-       , args...)
+    sim_data = Dict()
+
+    for algo in ALGOS
+        sim_data[algo] = [
+            "num_reporters" => num_reporters,
+            "num_events" => num_events,
+            "collude" => collude,
+            "itermax" => ITERMAX,
+            "variance_threshold" => convert(Array, variance_threshold_range),
+            "liar_threshold" => convert(Array, liar_threshold_range),
+            "vtrue" => results[algo]["mean"]["vtrue"],
+            "beats" => results[algo]["mean"]["beats"],
+            "correct" => results[algo]["mean"]["correct"],
+            "vtrue_std" => results[algo]["stderr"]["vtrue"],
+            "beats_std" => results[algo]["stderr"]["beats"],
+            "correct_std" => results[algo]["stderr"]["correct"],
+        ]
+    end
+
+    jldopen("sim_" * repr(now()) * ".jld", "w") do file
+        write(file, "sim_data", sim_data)
+    end
+
+    return sim_data
 end
 
 function jldload(fname="sim_2015-02-14T00:58:15.jld")

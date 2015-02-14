@@ -62,6 +62,7 @@ class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
                  catch_tolerance=0.1, max_row=5000, alpha=0.1, verbose=False,
+                 algorithm="single_component",
                  run_ica=False, run_fixed_threshold=False, run_inverse_scores=False,
                  run_ica_prewhitened=False, run_ica_inverse_scores=False,
                  run_fixed_threshold_sum=False, variance_threshold=0.85):
@@ -84,14 +85,8 @@ class Oracle(object):
         self.verbose = verbose
         self.num_reporters = len(reports)
         self.num_events = len(reports[0])
-        self.run_ica = run_ica
-        self.run_fixed_threshold = run_fixed_threshold
-        self.run_fixed_threshold_sum = run_fixed_threshold_sum
-        if run_fixed_threshold or run_fixed_threshold_sum:
-            self.variance_threshold = variance_threshold
-        self.run_inverse_scores = run_inverse_scores
-        self.run_ica_inverse_scores = run_ica_inverse_scores
-        self.run_ica_prewhitened = run_ica_prewhitened
+        self.algorithm = algorithm
+        self.variance_threshold = variance_threshold
         if reputation is None:
             self.weighted = False
             self.total_rep = self.num_reporters
@@ -159,12 +154,19 @@ class Oracle(object):
                     reports[nan_index,j] = guess
         return reports
 
-    def weighted_cov(self, reports_filled):
-        """Weights are the number of coins people start with, so the aim of this
+    def weighted_pca(self, reports_filled):
+        """Calculates new reputations using a weighted Principal Component
+        Analysis (PCA).
+
+        Weights are the number of coins people start with, so the aim of this
         weighting is to count 1 report for each of their coins -- e.g., guy with 10
         coins effectively gets 10 reports, guy with 1 coin gets 1 report, etc.
+        
+        The reports matrix has reporters as rows and events as columns.
 
         """
+        convergence = False
+
         # Compute the weighted mean (of all reporters) for each event
         weighted_mean = np.ma.average(reports_filled,
                                       axis=0,
@@ -175,43 +177,28 @@ class Oracle(object):
 
         # Compute the unbiased weighted population covariance
         # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
-        ssq = np.sum(self.reputation**2)
-        covariance_matrix = 1/float(1 - ssq) * np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation)
-
-        return covariance_matrix, mean_deviation
-
-    def weighted_pca(self, reports_filled):
-        """Calculates new reputations using a weighted Principal Component
-        Analysis (PCA).
+        covariance_matrix = np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation) / float(1 - np.sum(self.reputation**2))
         
-        The reports matrix has reporters as rows and events as columns.
+        if self.algorithm == "single_component":
 
-        """
-        covariance_matrix, mean_deviation = self.weighted_cov(reports_filled)
+            # H is the un-normalized eigenvector matrix
+            H = np.linalg.svd(covariance_matrix)[0]
 
-        #############################
-        # Reference implementation: #
-        # First principal component #
-        #############################
+            # Normalize loading by Euclidean distance
+            first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
+            first_score = np.dot(mean_deviation, first_loading)
 
-        # H is the un-normalized eigenvector matrix
-        H = np.linalg.svd(covariance_matrix)[0]
+            set1 = first_score + np.abs(np.min(first_score))
+            set2 = first_score - np.max(first_score)
+            old = np.dot(self.reputation.T, reports_filled)
+            new1 = np.dot(self.get_weight(set1), reports_filled)
+            new2 = np.dot(self.get_weight(set2), reports_filled)
+            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+            adj_prin_comp = set1 if ref_ind <= 0 else set2
 
-        # Normalize loading by Euclidean distance
-        first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
-        first_score = np.dot(mean_deviation, first_loading)
+            net_adj_prin_comp = adj_prin_comp
 
-        set1 = first_score + np.abs(np.min(first_score))
-        set2 = first_score - np.max(first_score)
-        old = np.dot(self.reputation.T, reports_filled)
-        new1 = np.dot(self.get_weight(set1), reports_filled)
-        new2 = np.dot(self.get_weight(set2), reports_filled)
-        ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-        adj_prin_comp = set1 if ref_ind <= 0 else set2
-
-        convergence = False
-
-        if self.run_fixed_threshold:
+        elif self.algorithm == "fixed_threshold":
 
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
@@ -232,7 +219,7 @@ class Oracle(object):
 
             convergence = True
 
-        elif self.run_fixed_threshold_sum:
+        elif self.algorithm == "fixed_threshold_sum":
 
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
@@ -257,7 +244,7 @@ class Oracle(object):
 
             convergence = True            
 
-        elif self.run_inverse_scores:
+        elif self.algorithm == "inverse_scores":
 
             # principal_components = PCA().fit_transform(covariance_matrix)
             principal_components = np.linalg.svd(covariance_matrix)[0]
@@ -272,110 +259,109 @@ class Oracle(object):
 
             convergence = True
 
-        elif self.run_ica:
-            ica = FastICA(n_components=self.num_events,
-                          whiten=False,
-                          random_state=0,
-                          max_iter=1000)
-            with warnings.catch_warnings(record=True) as w:
-                try:
-                    S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
-                    if len(w):
-                        net_adj_prin_comp = adj_prin_comp
-                    else:
-                        if self.verbose:
-                            print "ICA loadings:"
-                            print S_
-                        
-                        S_first_loading = S_[:,0]
-                        S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
-                        S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
-
-                        S_set1 = S_first_score + np.abs(np.min(S_first_score))
-                        S_set2 = S_first_score - np.max(S_first_score)
-                        S_old = np.dot(self.reputation.T, reports_filled)
-                        S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
-                        S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
-
-                        S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
-                        S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
-
-                        if self.verbose:
-                            print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
-
-                        net_adj_prin_comp = S_adj_prin_comp
-
-                        # Normalized absolute inverse scores
-                        net_adj_prin_comp = 1 / np.abs(first_score)
-                        net_adj_prin_comp /= np.sum(net_adj_prin_comp)
-
-                        convergence = not any(np.isnan(net_adj_prin_comp))
-                except:
-                    net_adj_prin_comp = adj_prin_comp
-
-        elif self.run_ica_prewhitened:
+        elif self.algorithm == "ica":
             ica = FastICA(n_components=self.num_events, whiten=False)
-            with warnings.catch_warnings(record=True) as w:
-                try:
-                    S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
-                    if len(w):
-                        net_adj_prin_comp = adj_prin_comp
-                    else:
-                        if self.verbose:
-                            print "ICA loadings:"
-                            print S_
-                        
-                        S_first_loading = S_[:,0]
-                        S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
-                        S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
+                          # random_state=0,
+                          # max_iter=1000)
+            while not convergence:
+                with warnings.catch_warnings(record=True) as w:
+                    try:
+                        S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
+                        if len(w):
+                            continue
+                        else:
+                            if self.verbose:
+                                print "ICA loadings:"
+                                print S_
+                            
+                            S_first_loading = S_[:,0]
+                            S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
+                            S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
 
-                        S_set1 = S_first_score + np.abs(np.min(S_first_score))
-                        S_set2 = S_first_score - np.max(S_first_score)
-                        S_old = np.dot(self.reputation.T, reports_filled)
-                        S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
-                        S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
+                            S_set1 = S_first_score + np.abs(np.min(S_first_score))
+                            S_set2 = S_first_score - np.max(S_first_score)
+                            S_old = np.dot(self.reputation.T, reports_filled)
+                            S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
+                            S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
 
-                        S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
-                        S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
+                            S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
+                            S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
 
-                        if self.verbose:
-                            print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+                            if self.verbose:
+                                print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
 
-                        net_adj_prin_comp = S_adj_prin_comp
+                            net_adj_prin_comp = S_adj_prin_comp
 
-                        # Normalized absolute inverse scores
-                        net_adj_prin_comp = 1 / np.abs(first_score)
-                        net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+                            # Normalized absolute inverse scores
+                            net_adj_prin_comp = 1 / np.abs(first_score)
+                            net_adj_prin_comp /= np.sum(net_adj_prin_comp)
 
-                        convergence = not any(np.isnan(net_adj_prin_comp))
-                except:
-                    net_adj_prin_comp = adj_prin_comp
+                            convergence = not any(np.isnan(net_adj_prin_comp))
+                    except:
+                        continue
 
-        elif self.run_ica_inverse_scores:
+        elif self.algorithm == "ica_prewhitened":
             ica = FastICA(n_components=self.num_events, whiten=True)
-            with warnings.catch_warnings(record=True) as w:
-                try:
-                    S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
-                    if len(w):
-                        net_adj_prin_comp = adj_prin_comp
-                    else:
-                        if self.verbose:
-                            print "ICA loadings:"
-                            print S_
-                        
-                        S_first_loading = S_[:,0]
-                        S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
-                        S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
+            while not convergence:
+                with warnings.catch_warnings(record=True) as w:
+                    try:
+                        S_ = ica.fit_transform(covariance_matrix)   # Reconstruct signals
+                        if len(w):
+                            continue
+                        else:
+                            if self.verbose:
+                                print "ICA loadings:"
+                                print S_
+                            
+                            S_first_loading = S_[:,0]
+                            S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
+                            S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).ravel()
 
-                        # Normalized absolute inverse scores
-                        net_adj_prin_comp = 1 / np.abs(S_first_score)
-                        net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+                            S_set1 = S_first_score + np.abs(np.min(S_first_score))
+                            S_set2 = S_first_score - np.max(S_first_score)
+                            S_old = np.dot(self.reputation.T, reports_filled)
+                            S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
+                            S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
 
-                        convergence = not any(np.isnan(net_adj_prin_comp))
-                except:
-                    net_adj_prin_comp = adj_prin_comp
-        else:
-            net_adj_prin_comp = adj_prin_comp
+                            S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
+                            S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
+
+                            if self.verbose:
+                                print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+
+                            net_adj_prin_comp = S_adj_prin_comp
+
+                            # Normalized absolute inverse scores
+                            net_adj_prin_comp = 1 / np.abs(first_score)
+                            net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+
+                            convergence = not any(np.isnan(net_adj_prin_comp))
+                    except:
+                        continue
+
+        elif self.algorithm == "ica_inverse_scores":
+            ica = FastICA(n_components=self.num_events, whiten=True)
+            while not convergence:
+                with warnings.catch_warnings(record=True) as w:
+                    try:
+                        S_ = ica.fit_transform(covariance_matrix)
+                        if len(w):
+                            continue
+                        else:
+                            S_first_loading = S_[:,0]
+                            S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
+                            S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).ravel()
+
+                            # Normalized absolute inverse scores
+                            net_adj_prin_comp = 1 / np.abs(S_first_score)
+                            net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+
+                            convergence = not any(np.isnan(net_adj_prin_comp))
+                    except:
+                        continue
+
+        # ica kurtosis threshold?
+        # use covariance matrix sum-over-rows directly, rather than pca?
 
         row_reward_weighted = self.reputation
         if max(abs(net_adj_prin_comp)) != 0:
@@ -392,12 +378,7 @@ class Oracle(object):
         }
 
     def consensus(self):
-        """PCA-based consensus algorithm.
 
-        Returns:
-          dict: consensus results
-
-        """
         # Handle missing values
         reports_filled = self.interpolate(self.reports)
 
