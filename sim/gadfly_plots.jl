@@ -128,7 +128,7 @@ pl = plot(df,
           Guide.XLabel("% liars"), Guide.YLabel(""),
           Geom.subplot_grid(Geom.point, Geom.line, Geom.errorbar,
                             Guide.xticks(ticks=liar_threshold, label=false),
-                            free_y_axis=false))
+                            free_y_axis=true))
 pl_file = "sens_$algo.svg"
 draw(SVG(pl_file, 12inch, 6inch), pl)
 

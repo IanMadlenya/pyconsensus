@@ -16,8 +16,8 @@ num_reporters = 50
     this_rep = A["agents"]["this_rep"]  # from this round
     true_idx = first(find(reporters .== "true"))
 
-    # percent increase/decrease vs true
-    vtrue = this_rep[true_idx] - this_rep
+    # increase/decrease vs true
+    vtrue = this_rep - this_rep[true_idx]
 
     liars = find(reporters .== "liar")
     beats = sum(vtrue[reporters .== "liar"] .> 0) / length(liars) * 100
