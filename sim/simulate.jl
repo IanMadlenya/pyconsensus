@@ -6,9 +6,9 @@ using HDF5, JLD
 
 @pyimport pyconsensus
 
-EVENTS = 500
-REPORTERS = 1000
-ITERMAX = 100
+EVENTS = 50
+REPORTERS = 100
+ITERMAX = 5
 SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best
