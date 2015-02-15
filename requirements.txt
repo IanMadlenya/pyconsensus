@@ -2,4 +2,5 @@ numpy>=1.8.2
 weightedstats>=0.2
 six>=1.8.0
 pandas>=0.15.2
-scipy
+scipy>=0.15.1
+scikit-learn>=0.15.2

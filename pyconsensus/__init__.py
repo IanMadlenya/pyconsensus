@@ -39,13 +39,12 @@ from pprint import pprint
 from copy import deepcopy
 import numpy as np
 import pandas as pd
-from scipy import signal
 from sklearn.decomposition import FastICA, PCA
 from weightedstats import weighted_median
 from six.moves import xrange as range
 
 __title__      = "pyconsensus"
-__version__    = "0.4"
+__version__    = "0.4.1"
 __author__     = "Paul Sztorc and Jack Peterson"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
