@@ -9,24 +9,29 @@ using JointMoments
 
 num_events = 50
 num_reporters = 100
-ITERMAX = 1000
-VARIANCE = 0.75
+ITERMAX = 50
+VARIANCE = 0.9
 DISTORT = 0
 VERBOSE = false
 CONSPIRACY = false
-ALLWRONG = false
+ALLWRONG = true
 ALGOS = [
     "single_component",
-    "fixed_threshold",
+    # "fixed_threshold",
     "fixed_threshold_sum",
-    "inverse_scores",
+    # "inverse_scores",
     "ica",
-    "ica_prewhitened",
+    # "ica_prewhitened",
     "ica_inverse_scores",
+]
+METRICS = [
+    "beats",
+    "vtrue",
+    "correct",
 ]
 # Collusion parameter:
 # 0.6 = 60% chance that liars' lies will be identical
-collude = 0.6
+COLLUDE = 0.6
 
 function process_oracle_results(A, reporters)
     this_rep = A["agents"]["this_rep"]  # from this round
@@ -144,7 +149,9 @@ function generate_data(collusion, liar_threshold; variance_threshold=VARIANCE)
     ]
 end
 
-function simulate(collusion, liar_threshold, variance_threshold)
+function simulate(liar_threshold;
+                  variance_threshold=VARIANCE,
+                  collusion=COLLUDE)
     iterate = (Int64)[]
     i = 1
     reporters = []
@@ -215,7 +222,9 @@ function simulate(collusion, liar_threshold, variance_threshold)
     return C
 end
 
-function sensitivity(liar_threshold_range, variance_threshold_range)
+function sensitivity(liar_threshold_range::Range,
+                     variance_threshold_range::Union(Range, Real),
+                     parametrize::Bool)
 
     results = Dict()
 
@@ -239,14 +248,26 @@ function sensitivity(liar_threshold_range, variance_threshold_range)
 
     for (row, liar_threshold) in enumerate(liar_threshold_range)
         println("liar_threshold: ", liar_threshold)
-        for (col, variance_threshold) in enumerate(variance_threshold_range)
-            println("  variance_threshold: ", variance_threshold)
-            C = simulate(collude, liar_threshold, variance_threshold)
+        if parametrize
+            # Variance threshold parametrization
+            for (col, variance_threshold) in enumerate(variance_threshold_range)
+                println("  variance_threshold: ", variance_threshold)
+                C = simulate(collude, liar_threshold, variance_threshold)
+                for algo in ALGOS
+                    for statistic in ("mean", "stderr")
+                        results[algo][statistic]["vtrue"][row,col] = C[algo][statistic]["vtrue"]
+                        results[algo][statistic]["beats"][row,col] = C[algo][statistic]["beats"]
+                        results[algo][statistic]["correct"][row,col] = C[algo][statistic]["correct"]
+                    end
+                end
+            end
+        else
+            C = simulate(collude, liar_threshold)
             for algo in ALGOS
                 for statistic in ("mean", "stderr")
-                    results[algo][statistic]["vtrue"][row,col] = C[algo][statistic]["vtrue"]
-                    results[algo][statistic]["beats"][row,col] = C[algo][statistic]["beats"]
-                    results[algo][statistic]["correct"][row,col] = C[algo][statistic]["correct"]
+                    results[algo][statistic]["vtrue"][row,1] = C[algo][statistic]["vtrue"]
+                    results[algo][statistic]["beats"][row,1] = C[algo][statistic]["beats"]
+                    results[algo][statistic]["correct"][row,1] = C[algo][statistic]["correct"]
                 end
             end
         end
@@ -256,16 +277,16 @@ function sensitivity(liar_threshold_range, variance_threshold_range)
     # Save data to file #
     #####################
 
-    sim_data = Dict()
-
+    sim_data = {
+        "num_reporters" => num_reporters,
+        "num_events" => num_events,
+        "collude" => collude,
+        "itermax" => ITERMAX,
+        "variance_threshold" => convert(Array, variance_threshold_range),
+        "liar_threshold" => convert(Array, liar_threshold_range),
+    }
     for algo in ALGOS
         sim_data[algo] = [
-            "num_reporters" => num_reporters,
-            "num_events" => num_events,
-            "collude" => collude,
-            "itermax" => ITERMAX,
-            "variance_threshold" => convert(Array, variance_threshold_range),
-            "liar_threshold" => convert(Array, liar_threshold_range),
             "vtrue" => results[algo]["mean"]["vtrue"],
             "beats" => results[algo]["mean"]["beats"],
             "correct" => results[algo]["mean"]["correct"],
@@ -282,11 +303,14 @@ function sensitivity(liar_threshold_range, variance_threshold_range)
     return sim_data
 end
 
-function jldload(fname="sim_2015-02-14T00:58:15.jld")
+sensitivity(ltr::Range, vtr::Real) = sensitivity(ltr, vtr, false)
+sensitivity(ltr::Range) = sensitivity(ltr, VARIANCE)
+
+function jldload(fname="sim_2015-02-14T20:37:31.jld")
     jldopen(fname, "r") do file
         read(file, "sim_data")
     end
 end
 
 # Auto load data from REPL
-~isinteractive() || (sim_data = jldload("sim_2015-02-14T00:58:15.jld"))
+~isinteractive() || (sim_data = jldload("sim_2015-02-14T20:37:31.jld"))
