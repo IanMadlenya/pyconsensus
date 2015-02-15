@@ -202,7 +202,7 @@ end
     end
 
     N = sqrt(ITERMAX)
-    C = Dict()
+    C = { "iterate" => iterate }
     for algo in ALGOS
         C[algo] = [
             "mean" => [
@@ -263,6 +263,7 @@ function sensitivity(liar_threshold_range::Range,
             end
         else
             C = simulate(liar_threshold, collusion=COLLUDE)
+            results["iterate"] = C["iterate"]
             for algo in ALGOS
                 for statistic in ("mean", "stderr")
                     results[algo][statistic]["vtrue"][row,1] = C[algo][statistic]["vtrue"]
@@ -289,6 +290,7 @@ function sensitivity(liar_threshold_range::Range,
         "allwrong" => ALLWRONG,
         "variance_threshold" => variance_thresholds,
         "liar_threshold" => convert(Array, liar_threshold_range),
+        "iterate" => results["iterate"],
     }
     for algo in ALGOS
         sim_data[algo] = [
