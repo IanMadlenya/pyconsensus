@@ -30,7 +30,7 @@ METRICS = [
 ]
 # Collusion parameter:
 # 0.6 = 60% chance that liars' lies will be identical
-COLLUDE = 0.0
+COLLUDE = 0.6
 
 function process_oracle_results(A, reporters)
     this_rep = A["agents"]["this_rep"]  # from this round
