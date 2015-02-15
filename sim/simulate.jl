@@ -43,7 +43,6 @@ function compute_metrics(data::Dict{Symbol,Any},
 
     # "this_rep" is the reputation awarded this round (before smoothing)
     liars_bonus = this_rep - this_rep[first(find(data[:reporters] .== "true"))]
-    correct = outcomes .== data[:correct_answers]
     [
         # "liars_bonus": bonus reward liars received (in excess of true reporters')
         :liars_bonus => sum(liars_bonus),
@@ -52,7 +51,7 @@ function compute_metrics(data::Dict{Symbol,Any},
         :beats => sum(liars_bonus[data[:liars]] .> 0) / data[:num_liars] * 100,
 
         # Outcomes that matched our known correct answers list
-        :correct => countnz(correct) / EVENTS * 100,
+        :correct => countnz(outcomes .== data[:correct_answers]) / EVENTS * 100,
     ]
 end
 
@@ -211,7 +210,7 @@ function simulate(liar_threshold::Real;
             end
             push!(B[algo]["liars_bonus"], metrics[:liars_bonus])
             push!(B[algo]["beats"], metrics[:beats])
-            push!(B[algo]["correct"], )
+            push!(B[algo]["correct"], metrics[:correct])
         end
 
         push!(iterate, i)
@@ -327,11 +326,11 @@ end
 sensitivity(ltr::Range, vtr::Real) = sensitivity(ltr, vtr, false)
 sensitivity(ltr::Range) = sensitivity(ltr, VARIANCE)
 
-function jldload(fname::String="sim_2015-02-15T01:41:57.jld")
+function jldload(fname::String="sim_2015-02-15T14:05:21.jld")
     jldopen(fname, "r") do file
         read(file, "sim_data")
     end
 end
 
 # Auto load data from REPL
-~isinteractive() || (sim_data = jldload("sim_2015-02-15T01:41:57.jld"))
+~isinteractive() || (sim_data = jldload("sim_2015-02-15T14:05:21.jld"))
