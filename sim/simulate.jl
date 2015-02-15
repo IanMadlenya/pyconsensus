@@ -31,7 +31,7 @@ METRICS = [
 ]
 # Collusion parameter:
 # 0.6 = 60% chance that liars' lies will be identical
-COLLUDE = 0.6
+COLLUDE = 0.0
 
 function process_oracle_results(A, reporters)
     this_rep = A["agents"]["this_rep"]  # from this round
@@ -149,7 +149,7 @@ function generate_data(collusion, liar_threshold; variance_threshold=VARIANCE)
     ]
 end
 
-function simulate(liar_threshold;
+@debug function simulate(liar_threshold;
                   variance_threshold=VARIANCE,
                   collusion=COLLUDE)
     iterate = (Int64)[]
@@ -158,6 +158,9 @@ function simulate(liar_threshold;
     B = Dict()
     for algo in ALGOS
         B[algo] = Dict()
+        B[algo]["vtrue"] = (Float64)[]
+        B[algo]["beats"] = (Float64)[]
+        B[algo]["correct"] = (Float64)[]
     end
     while i <= ITERMAX
         data = generate_data(
@@ -186,14 +189,10 @@ function simulate(liar_threshold;
                 )
                 A[algo]["vtrue"] = sum(A[algo]["vtrue"])
             end
-            B[algo]["vtrue"] = (Float64)[]
-            B[algo]["beats"] = (Float64)[]
-            B[algo]["correct"] = (Float64)[]
             correctness = A[algo]["events"]["outcomes_final"] .== data[:correct_answers]
-            pct_correct = countnz(correctness) / num_events * 100
             push!(B[algo]["vtrue"], A[algo]["vtrue"])
             push!(B[algo]["beats"], A[algo]["beats"])
-            push!(B[algo]["correct"], pct_correct)
+            push!(B[algo]["correct"], countnz(correctness) / num_events * 100)
         end
 
         push!(iterate, i)
@@ -252,7 +251,9 @@ function sensitivity(liar_threshold_range::Range,
             # Variance threshold parametrization
             for (col, variance_threshold) in enumerate(variance_threshold_range)
                 println("  variance_threshold: ", variance_threshold)
-                C = simulate(collude, liar_threshold, variance_threshold)
+                C = simulate(liar_threshold,
+                             variance_threshold=variance_threshold,
+                             collusion=COLLUDE)
                 for algo in ALGOS
                     for statistic in ("mean", "stderr")
                         results[algo][statistic]["vtrue"][row,col] = C[algo][statistic]["vtrue"]
@@ -262,7 +263,7 @@ function sensitivity(liar_threshold_range::Range,
                 end
             end
         else
-            C = simulate(collude, liar_threshold)
+            C = simulate(liar_threshold, collusion=COLLUDE)
             for algo in ALGOS
                 for statistic in ("mean", "stderr")
                     results[algo][statistic]["vtrue"][row,1] = C[algo][statistic]["vtrue"]
@@ -280,7 +281,7 @@ function sensitivity(liar_threshold_range::Range,
     sim_data = {
         "num_reporters" => num_reporters,
         "num_events" => num_events,
-        "collude" => collude,
+        "collude" => COLLUDE,
         "itermax" => ITERMAX,
         "variance_threshold" => convert(Array, variance_threshold_range),
         "liar_threshold" => convert(Array, liar_threshold_range),
