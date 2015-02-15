@@ -3,18 +3,17 @@ using DataFrames
 using Dates
 using Debug
 using HDF5, JLD
-using JointMoments
 
 @pyimport pyconsensus
 
-num_events = 50
-num_reporters = 100
-ITERMAX = 50
-VARIANCE = 0.9
+num_events = 500
+num_reporters = 1000
+ITERMAX = 10000
+VARIANCE = 0.9  # or 0.75 for fixed_threshold
 DISTORT = 0
 VERBOSE = false
 CONSPIRACY = false
-ALLWRONG = true
+ALLWRONG = false
 ALGOS = [
     "single_component",
     # "fixed_threshold",
@@ -307,11 +306,11 @@ end
 sensitivity(ltr::Range, vtr::Real) = sensitivity(ltr, vtr, false)
 sensitivity(ltr::Range) = sensitivity(ltr, VARIANCE)
 
-function jldload(fname="sim_2015-02-14T20:37:31.jld")
+function jldload(fname="sim_2015-02-15T01:41:57.jld")
     jldopen(fname, "r") do file
         read(file, "sim_data")
     end
 end
 
 # Auto load data from REPL
-~isinteractive() || (sim_data = jldload("sim_2015-02-14T20:37:31.jld"))
+~isinteractive() || (sim_data = jldload("sim_2015-02-15T01:41:57.jld"))
