@@ -268,7 +268,7 @@ class Oracle(object):
                                 print S_
                             S_first_loading = S_[:,0]
                             S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
-                            S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
+                            S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).ravel()
 
                             S_set1 = S_first_score + np.abs(np.min(S_first_score))
                             S_set2 = S_first_score - np.max(S_first_score)

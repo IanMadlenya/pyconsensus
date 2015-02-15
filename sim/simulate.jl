@@ -23,12 +23,12 @@ CONSPIRACY = false
 ALLWRONG = false
 ALGOS = [
     "single_component",
-    # "length_threshold",
     "fixed_threshold",
-    # "inverse_scores",
     "ica",
-    # "ica_prewhitened",
     "ica_inverse_scores",
+    # "ica_prewhitened",
+    # "inverse_scores",
+    # "length_threshold",
 ]
 METRICS = [
     "beats",
@@ -196,7 +196,7 @@ function simulate(liar_threshold;
                     variance_threshold=variance_threshold,
                     algorithm=algo,
                 )[:consensus]()
-                metrics = calc_metrics(
+                metrics = compute_metrics(
                     data,
                     A[algo]["events"]["outcomes_final"],
                     A[algo]["agents"]["this_rep"],
@@ -208,9 +208,9 @@ function simulate(liar_threshold;
         end
 
         push!(iterate, i)
-        # if VERBOSE
+        if VERBOSE
             (i == ITERMAX) || (i % 10 == 0) ? println('.') : print('.')
-        # end
+        end
         i += 1
     end
 
