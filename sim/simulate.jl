@@ -277,6 +277,8 @@ function sensitivity(liar_threshold_range::Range,
     # Save data to file #
     #####################
 
+    variance_thresholds = (isa(variance_threshold_range, Range)) ?
+        convert(Array, variance_threshold_range) : variance_threshold_range
     sim_data = {
         "num_reporters" => num_reporters,
         "num_events" => num_events,
@@ -285,7 +287,7 @@ function sensitivity(liar_threshold_range::Range,
         "distort" => DISTORT,
         "conspiracy" => CONSPIRACY,
         "allwrong" => ALLWRONG,
-        "variance_threshold" => convert(Array, variance_threshold_range),
+        "variance_threshold" => variance_thresholds,
         "liar_threshold" => convert(Array, liar_threshold_range),
     }
     for algo in ALGOS
