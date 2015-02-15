@@ -67,10 +67,7 @@ pl = plot(df,
     Guide.XLabel("% liars"),
     Guide.YLabel(""),
     # Guide.xticks(ticks=liar_threshold, label=true),
-    Theme(
-        # default_color=color("#000099"),
-        panel_stroke=color("#848484"),
-    ),
+    Theme(panel_stroke=color("#848484")),
     Scale.y_continuous(format=:plain),
     Geom.subplot_grid(
         Geom.point,

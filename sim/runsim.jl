@@ -2,7 +2,7 @@ include("simulate.jl")
 
 @pyimport pyconsensus
 
-liar_threshold_range = 0.1:0.05:0.95
+liar_threshold_range = 0.05:0.025:0.95
 
 # Empirically, a 90% variance threshold seems to work best!
 # (only used for fixed_threshold and fixed_threshold_sum)
