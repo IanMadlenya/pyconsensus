@@ -6,8 +6,8 @@ using HDF5, JLD
 
 @pyimport pyconsensus
 
-EVENTS = 50
-REPORTERS = 100
+EVENTS = 500
+REPORTERS = 1000
 ITERMAX = 100
 SQRTN = sqrt(ITERMAX)
 
@@ -112,7 +112,7 @@ function generate_data(collusion::Real,
     if ALLWRONG
         @inbounds for i = 1:num_liars
             @inbounds for j = 1:EVENTS
-                while reports[liars[i],j] == correct_answers[j]
+                @inbounds while reports[liars[i],j] == correct_answers[j]
                     reports[liars[i],j] = rand(-1:1)
                 end
             end

@@ -52,7 +52,6 @@ __email__      = "jack@tinybike.net"
 
 pd.set_option("display.max_rows", 25)
 pd.set_option("display.width", 1000)
-
 np.set_printoptions(linewidth=225,
                     suppress=True,
                     formatter={"float": "{: 0.6f}".format})
