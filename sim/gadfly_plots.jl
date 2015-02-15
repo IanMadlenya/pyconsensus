@@ -1,7 +1,7 @@
 using Gadfly
 
-num_algos = length(ALGOS)
-num_metrics = length(METRICS)
+num_algos = length(sim_data["algos"])
+num_metrics = length(sim_data["metrics"])
 gridrows = length(sim_data["liar_threshold"])
 
 # Build plotting dataframe
@@ -13,8 +13,8 @@ algos = (String)[]
 metrics = (String)[]
 error_minus = (Float64)[]
 error_plus = (Float64)[]
-for algo in ALGOS
-    if algo in ("fixed_threshold", "fixed_threshold_sum")
+for algo in sim_data["algos"]
+    if sim_data["parametrize"] && algo in ("length_threshold", "fixed_threshold")
         target = last(findmax(sum(sim_data[algo]["correct"], 1)))
     else
         target = 1
@@ -22,7 +22,7 @@ for algo in ALGOS
     data = [
         data,
         sim_data[algo]["beats"][:,target],
-        sim_data[algo]["vtrue"][:,target],
+        sim_data[algo]["liars_bonus"][:,target],
         sim_data[algo]["correct"][:,target],
     ]
     algos = [
@@ -32,19 +32,19 @@ for algo in ALGOS
     metrics = [
         metrics,
         fill!(Array(String, gridrows), "% beats"),
-        fill!(Array(String, gridrows), "liars' reward"),
+        fill!(Array(String, gridrows), "liars' bonus"),
         fill!(Array(String, gridrows), "% correct"),
     ]
     error_minus = [
         error_minus,
         sim_data[algo]["beats"][:,target] - sim_data[algo]["beats_std"][:,target],
-        sim_data[algo]["vtrue"][:,target] - sim_data[algo]["vtrue_std"][:,target],
+        sim_data[algo]["liars_bonus"][:,target] - sim_data[algo]["liars_bonus_std"][:,target],
         sim_data[algo]["correct"][:,target] - sim_data[algo]["correct_std"][:,target],
     ]
     error_plus = [
         error_plus,
         sim_data[algo]["beats"][:,target] + sim_data[algo]["beats_std"][:,target],
-        sim_data[algo]["vtrue"][:,target] + sim_data[algo]["vtrue_std"][:,target],
+        sim_data[algo]["liars_bonus"][:,target] + sim_data[algo]["liars_bonus_std"][:,target],
         sim_data[algo]["correct"][:,target] + sim_data[algo]["correct_std"][:,target],
     ]
 end

@@ -61,11 +61,8 @@ np.set_printoptions(linewidth=225,
 class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
-                 catch_tolerance=0.1, max_row=5000, alpha=0.1, verbose=False,
-                 algorithm="single_component",
-                 run_ica=False, run_fixed_threshold=False, run_inverse_scores=False,
-                 run_ica_prewhitened=False, run_ica_inverse_scores=False,
-                 run_fixed_threshold_sum=False, variance_threshold=0.85):
+                 catch_tolerance=0.1, alpha=0.1, verbose=False,
+                 algorithm="single_component", variance_threshold=0.9):
         """
         Args:
           reports (list-of-lists): reports matrix; rows = reporters, columns = Events.
@@ -78,13 +75,12 @@ class Oracle(object):
 
         """
         self.reports = np.ma.masked_array(reports, np.isnan(reports))
-        self.event_bounds = event_bounds
-        self.catch_tolerance = catch_tolerance
-        self.max_row = max_row
-        self.alpha = alpha
-        self.verbose = verbose
         self.num_reporters = len(reports)
         self.num_events = len(reports[0])
+        self.event_bounds = event_bounds
+        self.catch_tolerance = catch_tolerance
+        self.alpha = alpha
+        self.verbose = verbose
         self.algorithm = algorithm
         self.variance_threshold = variance_threshold
         if reputation is None:
@@ -96,15 +92,15 @@ class Oracle(object):
             self.total_rep = sum(np.array(reputation).ravel())
             self.reputation = np.array([i / float(self.total_rep) for i in reputation])
 
-    def get_weight(self, v):
-        """Takes an array, and returns proportional distance from zero."""
+    def normalize(self, v):
+        """Proportional distance from zero."""
         v = abs(v)
         if np.sum(v) == 0:
             v += 1
         return v / np.sum(v)
 
     def catch(self, X):
-        """Forces continuous values into bins at -1, 0, and 1"""
+        """Forces continuous values into bins at -1, 0, and 1."""
         center = 0
         if X < center - self.catch_tolerance:
             return -1
@@ -185,21 +181,20 @@ class Oracle(object):
         # Normalize loading by Euclidean distance
         first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
         first_score = np.dot(mean_deviation, first_loading)
-        
+
         if self.algorithm == "single_component":
 
             set1 = first_score + np.abs(np.min(first_score))
             set2 = first_score - np.max(first_score)
             old = np.dot(self.reputation.T, reports_filled)
-            new1 = np.dot(self.get_weight(set1), reports_filled)
-            new2 = np.dot(self.get_weight(set2), reports_filled)
+            new1 = np.dot(self.normalize(set1), reports_filled)
+            new2 = np.dot(self.normalize(set2), reports_filled)
             ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
             adj_prin_comp = set1 if ref_ind <= 0 else set2
-
             net_adj_prin_comp = adj_prin_comp
             convergence = True
 
-        elif self.algorithm == "fixed_threshold":
+        elif self.algorithm == "length_threshold":
 
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
@@ -209,22 +204,24 @@ class Oracle(object):
                 score = Sigma[i] * np.dot(mean_deviation, loading)
                 length += score**2
                 if var_exp > self.variance_threshold: break
-
             if self.verbose:
                 print i, "components"
-
             length = np.sqrt(length)
-
-            net_adj_prin_comp = 1 / np.abs(length)
-            net_adj_prin_comp /= np.sum(net_adj_prin_comp)
-
+            set1 = length + np.abs(np.min(length))
+            set2 = length - np.max(length)
+            old = np.dot(self.reputation.T, reports_filled)
+            new1 = np.dot(self.normalize(set1), reports_filled)
+            new2 = np.dot(self.normalize(set2), reports_filled)
+            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+            net_adj_prin_comp = set1 if ref_ind <= 0 else set2
+            # net_adj_prin_comp = 1 / np.abs(length)
+            # net_adj_prin_comp /= np.sum(net_adj_prin_comp)
             convergence = True
 
-        elif self.algorithm == "fixed_threshold_sum":
+        elif self.algorithm == "fixed_threshold":
 
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
-            
             for i, var_exp in enumerate(variance_explained):
                 loading = U.T[i]
                 score = np.dot(mean_deviation, loading)
@@ -233,23 +230,19 @@ class Oracle(object):
                 else:
                     net_score += Sigma[i] * score
                 if var_exp > self.variance_threshold: break
-
             set1 = net_score + np.abs(np.min(net_score))
             set2 = net_score - np.max(net_score)
             old = np.dot(self.reputation.T, reports_filled)
-            new1 = np.dot(self.get_weight(set1), reports_filled)
-            new2 = np.dot(self.get_weight(set2), reports_filled)
-
+            new1 = np.dot(self.normalize(set1), reports_filled)
+            new2 = np.dot(self.normalize(set2), reports_filled)
             ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
             net_adj_prin_comp = set1 if ref_ind <= 0 else set2
-
             convergence = True            
 
         elif self.algorithm == "inverse_scores":
 
             # principal_components = PCA().fit_transform(covariance_matrix)
             principal_components = np.linalg.svd(covariance_matrix)[0]
-
             first_loading = principal_components[:,0]
             first_loading = np.ma.masked_array(first_loading / np.sqrt(np.sum(first_loading**2)))
             first_score = np.dot(mean_deviation, first_loading)
@@ -257,7 +250,6 @@ class Oracle(object):
             # Normalized absolute inverse scores
             net_adj_prin_comp = 1 / np.abs(first_score)
             net_adj_prin_comp /= np.sum(net_adj_prin_comp)
-
             convergence = True
 
         elif self.algorithm == "ica":
@@ -274,7 +266,6 @@ class Oracle(object):
                             if self.verbose:
                                 print "ICA loadings:"
                                 print S_
-                            
                             S_first_loading = S_[:,0]
                             S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
                             S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).flatten()
@@ -282,15 +273,12 @@ class Oracle(object):
                             S_set1 = S_first_score + np.abs(np.min(S_first_score))
                             S_set2 = S_first_score - np.max(S_first_score)
                             S_old = np.dot(self.reputation.T, reports_filled)
-                            S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
-                            S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
-
+                            S_new1 = np.dot(self.normalize(S_set1), reports_filled)
+                            S_new2 = np.dot(self.normalize(S_set2), reports_filled)
                             S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
                             S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
-
                             if self.verbose:
-                                print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
-
+                                print self.normalize(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
                             net_adj_prin_comp = S_adj_prin_comp
 
                             # Normalized absolute inverse scores
@@ -321,15 +309,12 @@ class Oracle(object):
                             S_set1 = S_first_score + np.abs(np.min(S_first_score))
                             S_set2 = S_first_score - np.max(S_first_score)
                             S_old = np.dot(self.reputation.T, reports_filled)
-                            S_new1 = np.dot(self.get_weight(S_set1), reports_filled)
-                            S_new2 = np.dot(self.get_weight(S_set2), reports_filled)
-
+                            S_new1 = np.dot(self.normalize(S_set1), reports_filled)
+                            S_new2 = np.dot(self.normalize(S_set2), reports_filled)
                             S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
                             S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
-
                             if self.verbose:
-                                print self.get_weight(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
-
+                                print self.normalize(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
                             net_adj_prin_comp = S_adj_prin_comp
 
                             # Normalized absolute inverse scores
@@ -367,7 +352,7 @@ class Oracle(object):
 
         row_reward_weighted = self.reputation
         if max(abs(net_adj_prin_comp)) != 0:
-            row_reward_weighted = self.get_weight(net_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+            row_reward_weighted = self.normalize(net_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
 
         smooth_rep = self.alpha*row_reward_weighted + (1-self.alpha)*self.reputation.T
 
@@ -423,7 +408,7 @@ class Oracle(object):
             certainty.append(sum(player_info["smooth_rep"][reports_filled[:,i] == adj]))
 
         certainty = np.array(certainty)
-        consensus_reward = self.get_weight(certainty)
+        consensus_reward = self.normalize(certainty)
         avg_certainty = np.mean(certainty)
 
         # Participation
@@ -453,11 +438,11 @@ class Oracle(object):
 
         # Combine Information
         # Row
-        na_bonus_reporters = self.get_weight(participation_rows)
+        na_bonus_reporters = self.normalize(participation_rows)
         reporter_bonus = na_bonus_reporters * percent_na + player_info['smooth_rep'] * (1 - percent_na)
 
         # Column
-        na_bonus_events = self.get_weight(participation_columns)
+        na_bonus_events = self.normalize(participation_columns)
         author_bonus = na_bonus_events * percent_na + consensus_reward * (1 - percent_na)
 
         return {
