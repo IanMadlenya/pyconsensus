@@ -6,9 +6,9 @@ using HDF5, JLD
 
 @pyimport pyconsensus
 
-num_events = 50
-num_reporters = 100
-ITERMAX = 10
+num_events = 500
+num_reporters = 1000
+ITERMAX = 10000
 VARIANCE = 0.9  # or 0.75 for fixed_threshold
 DISTORT = 0
 VERBOSE = false
