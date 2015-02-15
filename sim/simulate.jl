@@ -6,9 +6,10 @@ using HDF5, JLD
 
 @pyimport pyconsensus
 
-EVENTS = 500
-REPORTERS = 1000
+EVENTS = 50
+REPORTERS = 100
 ITERMAX = 100
+SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best
 # for fixed_threshold, 75% for length_threshold
@@ -36,8 +37,11 @@ METRICS = [
     "correct",
 ]
 
-# "this_rep" is the reputation awarded this round (before smoothing)
-function compute_metrics(data, outcomes, this_rep)
+function compute_metrics(data::Dict{Symbol,Any},
+                         outcomes::Array{Any,1},
+                         this_rep::Array{Float64,1})
+
+    # "this_rep" is the reputation awarded this round (before smoothing)
     liars_bonus = this_rep - this_rep[first(find(data[:reporters] .== "true"))]
     correct = outcomes .== data[:correct_answers]
     [
@@ -52,7 +56,9 @@ function compute_metrics(data, outcomes, this_rep)
     ]
 end
 
-function generate_data(collusion, liar_threshold; variance_threshold=VARIANCE)
+function generate_data(collusion::Real,
+                       liar_threshold::Real;
+                       variance_threshold::Real=VARIANCE)
 
     # simplest version: no distortion
     distort_threshold = liar_threshold
@@ -104,8 +110,8 @@ function generate_data(collusion, liar_threshold; variance_threshold=VARIANCE)
 
     # Alternate: liars always answer incorrectly
     if ALLWRONG
-        for i = 1:num_liars
-            for j = 1:EVENTS
+        @inbounds for i = 1:num_liars
+            @inbounds for j = 1:EVENTS
                 while reports[liars[i],j] == correct_answers[j]
                     reports[liars[i],j] = rand(-1:1)
                 end
@@ -115,7 +121,7 @@ function generate_data(collusion, liar_threshold; variance_threshold=VARIANCE)
 
     # All-or-nothing collusion ("conspiracy")
     if CONSPIRACY
-        for i = 1:num_liars-1
+        @inbounds for i = 1:num_liars-1
             diceroll = first(rand(1))
             if diceroll < collusion
                 reports[liars[i],:] = reports[liars[1],:]
@@ -124,7 +130,7 @@ function generate_data(collusion, liar_threshold; variance_threshold=VARIANCE)
 
     # "Ordinary" collusion
     else
-        for i = 1:num_liars-1
+        @inbounds for i = 1:num_liars-1
 
             # Pairs
             diceroll = first(rand(1))
@@ -147,6 +153,7 @@ function generate_data(collusion, liar_threshold; variance_threshold=VARIANCE)
             end
         end
     end
+    
     ~VERBOSE || display([reporters reports])
     [
         :reports => reports,
@@ -163,20 +170,20 @@ function generate_data(collusion, liar_threshold; variance_threshold=VARIANCE)
     ]
 end
 
-function simulate(liar_threshold;
-                  variance_threshold=VARIANCE,
-                  collusion=COLLUDE)
+function simulate(liar_threshold::Real;
+                  variance_threshold::Real=VARIANCE,
+                  collusion::Real=COLLUDE)
     iterate = (Int64)[]
     i = 1
     reporters = []
     B = Dict()
-    for algo in ALGOS
+    @inbounds for algo in ALGOS
         B[algo] = Dict()
         B[algo]["liars_bonus"] = (Float64)[]
         B[algo]["beats"] = (Float64)[]
         B[algo]["correct"] = (Float64)[]
     end
-    while i <= ITERMAX
+    @inbounds while i <= ITERMAX
         data = generate_data(
             collusion,
             liar_threshold,
@@ -185,7 +192,7 @@ function simulate(liar_threshold;
 
         # consensus
         A = Dict()
-        for algo in ALGOS
+        @inbounds for algo in ALGOS
             A[algo] = { "convergence" => false }
             metrics = Dict()
             while ~A[algo]["convergence"]
@@ -214,9 +221,8 @@ function simulate(liar_threshold;
         i += 1
     end
 
-    N = sqrt(ITERMAX)
     C = { "iterate" => iterate }
-    for algo in ALGOS
+    @inbounds for algo in ALGOS
         C[algo] = [
             "mean" => [
                 "liars_bonus" => mean(B[algo]["liars_bonus"]),
@@ -224,9 +230,9 @@ function simulate(liar_threshold;
                 "correct" => mean(B[algo]["correct"]),
             ],
             "stderr" => [
-                "liars_bonus" => std(B[algo]["liars_bonus"]) / N,
-                "beats" => std(B[algo]["beats"]) / N,
-                "correct" => std(B[algo]["correct"]) / N,  
+                "liars_bonus" => std(B[algo]["liars_bonus"]) / SQRTN,
+                "beats" => std(B[algo]["beats"]) / SQRTN,
+                "correct" => std(B[algo]["correct"]) / SQRTN,  
             ],
         ]
     end
@@ -234,16 +240,13 @@ function simulate(liar_threshold;
 end
 
 function sensitivity(liar_threshold_range::Range,
-                     variance_threshold_range::Union(Range, Real),
+                     variance_threshold_range::Union(Real, Range),
                      parametrize::Bool)
-
-    results = Dict()
-
+    res = Dict()
     gridrows = length(liar_threshold_range)
     gridcols = length(variance_threshold_range)
-
-    for algo in ALGOS
-        results[algo] = [
+    @inbounds for algo in ALGOS
+        res[algo] = [
             "mean" => [
                 "liars_bonus" => zeros(gridrows, gridcols),
                 "beats" => zeros(gridrows, gridcols),
@@ -256,32 +259,32 @@ function sensitivity(liar_threshold_range::Range,
             ]
         ]
     end
-
-    for (row, liar_threshold) in enumerate(liar_threshold_range)
+    @inbounds for (row, liar_threshold) in enumerate(liar_threshold_range)
         println("liar_threshold: ", liar_threshold)
+
+        # Variance threshold parametrization
         if parametrize
-            # Variance threshold parametrization
-            for (col, variance_threshold) in enumerate(variance_threshold_range)
+            @inbounds for (col, variance_threshold) in enumerate(variance_threshold_range)
                 println("  variance_threshold: ", variance_threshold)
                 C = simulate(liar_threshold,
                              variance_threshold=variance_threshold,
                              collusion=COLLUDE)
-                for algo in ALGOS
-                    for statistic in ("mean", "stderr")
-                        results[algo][statistic]["liars_bonus"][row,col] = C[algo][statistic]["liars_bonus"]
-                        results[algo][statistic]["beats"][row,col] = C[algo][statistic]["beats"]
-                        results[algo][statistic]["correct"][row,col] = C[algo][statistic]["correct"]
+                @inbounds for algo in ALGOS
+                    for s in ("mean", "stderr")
+                        @inbounds res[algo][s]["liars_bonus"][row,col] = C[algo][s]["liars_bonus"]
+                        @inbounds res[algo][s]["beats"][row,col] = C[algo][s]["beats"]
+                        @inbounds res[algo][s]["correct"][row,col] = C[algo][s]["correct"]
                     end
                 end
             end
         else
             C = simulate(liar_threshold, collusion=COLLUDE)
-            results["iterate"] = C["iterate"]
-            for algo in ALGOS
-                for statistic in ("mean", "stderr")
-                    results[algo][statistic]["liars_bonus"][row,1] = C[algo][statistic]["liars_bonus"]
-                    results[algo][statistic]["beats"][row,1] = C[algo][statistic]["beats"]
-                    results[algo][statistic]["correct"][row,1] = C[algo][statistic]["correct"]
+            res["iterate"] = C["iterate"]
+            @inbounds for algo in ALGOS
+                for s in ("mean", "stderr")
+                    @inbounds res[algo][s]["liars_bonus"][row,1] = C[algo][s]["liars_bonus"]
+                    @inbounds res[algo][s]["beats"][row,1] = C[algo][s]["beats"]
+                    @inbounds res[algo][s]["correct"][row,1] = C[algo][s]["correct"]
                 end
             end
         end
@@ -303,16 +306,16 @@ function sensitivity(liar_threshold_range::Range,
         "parametrize" => parametrize,
         "liar_threshold" => convert(Array, liar_threshold_range),
         "variance_threshold" => variance_thresholds,
-        "iterate" => results["iterate"],
+        "iterate" => res["iterate"],
     }
-    for algo in ALGOS
+    @inbounds for algo in ALGOS
         sim_data[algo] = [
-            "liars_bonus" => results[algo]["mean"]["liars_bonus"],
-            "beats" => results[algo]["mean"]["beats"],
-            "correct" => results[algo]["mean"]["correct"],
-            "liars_bonus_std" => results[algo]["stderr"]["liars_bonus"],
-            "beats_std" => results[algo]["stderr"]["beats"],
-            "correct_std" => results[algo]["stderr"]["correct"],
+            "liars_bonus" => res[algo]["mean"]["liars_bonus"],
+            "beats" => res[algo]["mean"]["beats"],
+            "correct" => res[algo]["mean"]["correct"],
+            "liars_bonus_std" => res[algo]["stderr"]["liars_bonus"],
+            "beats_std" => res[algo]["stderr"]["beats"],
+            "correct_std" => res[algo]["stderr"]["correct"],
         ]
     end
     jldopen("sim_" * repr(now()) * ".jld", "w") do file
@@ -324,7 +327,7 @@ end
 sensitivity(ltr::Range, vtr::Real) = sensitivity(ltr, vtr, false)
 sensitivity(ltr::Range) = sensitivity(ltr, VARIANCE)
 
-function jldload(fname="sim_2015-02-15T01:41:57.jld")
+function jldload(fname::String="sim_2015-02-15T01:41:57.jld")
     jldopen(fname, "r") do file
         read(file, "sim_data")
     end

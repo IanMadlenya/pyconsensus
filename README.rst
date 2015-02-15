@@ -54,4 +54,4 @@ Tests
 
 Unit tests are in the test/ directory.  Julia simulations are in the sim/ directory::
 
-    $ julia runsim.jl
+    $ julia sim/runsim.jl
