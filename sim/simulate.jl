@@ -12,24 +12,24 @@ ITERMAX = 50
 SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best
-# for fixed_threshold, 75% for length_threshold
+# for fixed-variance, 75% for fixed-var-length
 VARIANCE = 0.9
 DISTORT = 0
 
 # Collusion: 0.2 => 20% chance liar will copy another liar
 # (todo: make this % chance to copy any user, not just liars)
-COLLUDE = 0.2
+COLLUDE = 0.0
 VERBOSE = false
 CONSPIRACY = false
 ALLWRONG = false
 ALGOS = [
-    "single_component",
-    "fixed_threshold",
-    "ica",
-    "ica_inverse_scores",
-    # "ica_prewhitened",
-    # "inverse_scores",
-    # "length_threshold",
+    "first-component",
+    "fixed-variance",
+    "ica-adjusted",
+    "ica-inverse",
+    # "ica-prewhitened",
+    # "inverse-scores",
+    "fixed-var-length",
 ]
 METRICS = [
     "beats",

@@ -14,7 +14,7 @@ metrics = (String)[]
 error_minus = (Float64)[]
 error_plus = (Float64)[]
 for algo in sim_data["algos"]
-    if sim_data["parametrize"] && algo in ("length_threshold", "fixed_threshold")
+    if sim_data["parametrize"] && algo in ("fixed-var-length", "fixed-variance")
         target = last(findmax(sum(sim_data[algo]["correct"], 1)))
     else
         target = 1
@@ -57,6 +57,23 @@ df = DataFrame(metric=metrics[:],
 
 # Plot metrics vs liar_threshold parameter
 set_default_plot_size(12inch, 7inch)
+optstr = ""
+for flag in ("conspiracy", "allwrong")
+    optstr *= (sim_data[flag]) ? " $flag" : ""
+end
+infoblurb = string(
+    sim_data["num_reporters"],
+    "x",
+    sim_data["num_events"],
+    " (",
+    sim_data["itermax"],
+    " iterations)",
+    " collude=",
+    sim_data["collude"],
+    " variance=",
+    sim_data["variance_threshold"],
+    optstr,
+)
 pl = plot(df,
     x=:liar_threshold,
     y=:data,
@@ -66,7 +83,7 @@ pl = plot(df,
     color=:algorithm,
     Guide.XLabel("% liars"),
     Guide.YLabel(""),
-    # Guide.xticks(ticks=liar_threshold, label=true),
+    Guide.Title(infoblurb),
     Theme(panel_stroke=color("#848484")),
     Scale.y_continuous(format=:plain),
     Geom.subplot_grid(
@@ -76,5 +93,5 @@ pl = plot(df,
         free_y_axis=true,
     ),
 )
-pl_file = "shootout_" * repr(now()) * ".svg"
+pl_file = "metrics_" * repr(now()) * ".svg"
 draw(SVG(pl_file, 12inch, 7inch), pl)

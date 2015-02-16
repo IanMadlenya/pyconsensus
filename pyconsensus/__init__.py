@@ -60,7 +60,7 @@ class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
                  catch_tolerance=0.1, alpha=0.1, verbose=False,
-                 algorithm="single_component", variance_threshold=0.9):
+                 algorithm="first-component", variance_threshold=0.9):
         """
         Args:
           reports (list-of-lists): reports matrix; rows = reporters, columns = Events.
@@ -180,7 +180,7 @@ class Oracle(object):
         first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
         first_score = np.dot(mean_deviation, first_loading)
 
-        if self.algorithm == "single_component":
+        if self.algorithm == "first-component":
 
             set1 = first_score + np.abs(np.min(first_score))
             set2 = first_score - np.max(first_score)
@@ -192,7 +192,7 @@ class Oracle(object):
             net_adj_prin_comp = adj_prin_comp
             convergence = True
 
-        elif self.algorithm == "length_threshold":
+        elif self.algorithm == "fixed-var-length":
 
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
@@ -216,7 +216,7 @@ class Oracle(object):
             # net_adj_prin_comp /= np.sum(net_adj_prin_comp)
             convergence = True
 
-        elif self.algorithm == "fixed_threshold":
+        elif self.algorithm == "fixed-variance":
 
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
@@ -228,6 +228,8 @@ class Oracle(object):
                 else:
                     net_score += Sigma[i] * score
                 if var_exp > self.variance_threshold: break
+            if self.verbose:
+                print i, "components"
             set1 = net_score + np.abs(np.min(net_score))
             set2 = net_score - np.max(net_score)
             old = np.dot(self.reputation.T, reports_filled)
@@ -237,7 +239,7 @@ class Oracle(object):
             net_adj_prin_comp = set1 if ref_ind <= 0 else set2
             convergence = True            
 
-        elif self.algorithm == "inverse_scores":
+        elif self.algorithm == "inverse-scores":
 
             # principal_components = PCA().fit_transform(covariance_matrix)
             principal_components = np.linalg.svd(covariance_matrix)[0]
@@ -250,7 +252,7 @@ class Oracle(object):
             net_adj_prin_comp /= np.sum(net_adj_prin_comp)
             convergence = True
 
-        elif self.algorithm == "ica":
+        elif self.algorithm == "ica-adjusted":
             ica = FastICA(n_components=self.num_events, whiten=False)
                           # random_state=0,
                           # max_iter=1000)
@@ -278,16 +280,11 @@ class Oracle(object):
                             if self.verbose:
                                 print self.normalize(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
                             net_adj_prin_comp = S_adj_prin_comp
-
-                            # Normalized absolute inverse scores
-                            net_adj_prin_comp = 1 / np.abs(first_score)
-                            net_adj_prin_comp /= np.sum(net_adj_prin_comp)
-
                             convergence = not any(np.isnan(net_adj_prin_comp))
                     except:
                         continue
 
-        elif self.algorithm == "ica_prewhitened":
+        elif self.algorithm == "ica-prewhitened":
             ica = FastICA(n_components=self.num_events, whiten=True)
             while not convergence:
                 with warnings.catch_warnings(record=True) as w:
@@ -299,7 +296,6 @@ class Oracle(object):
                             if self.verbose:
                                 print "ICA loadings:"
                                 print S_
-                            
                             S_first_loading = S_[:,0]
                             S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
                             S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).ravel()
@@ -314,16 +310,11 @@ class Oracle(object):
                             if self.verbose:
                                 print self.normalize(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
                             net_adj_prin_comp = S_adj_prin_comp
-
-                            # Normalized absolute inverse scores
-                            net_adj_prin_comp = 1 / np.abs(first_score)
-                            net_adj_prin_comp /= np.sum(net_adj_prin_comp)
-
                             convergence = not any(np.isnan(net_adj_prin_comp))
                     except:
                         continue
 
-        elif self.algorithm == "ica_inverse_scores":
+        elif self.algorithm == "ica-inverse":
             ica = FastICA(n_components=self.num_events, whiten=True)
             while not convergence:
                 with warnings.catch_warnings(record=True) as w:
