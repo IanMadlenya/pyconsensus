@@ -76,5 +76,5 @@ pl = plot(df,
         free_y_axis=true,
     ),
 )
-pl_file = "sensitivity.svg"
+pl_file = "shootout_" * repr(now()) * ".svg"
 draw(SVG(pl_file, 12inch, 7inch), pl)

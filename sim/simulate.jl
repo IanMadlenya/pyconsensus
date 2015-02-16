@@ -8,7 +8,7 @@ using HDF5, JLD
 
 EVENTS = 50
 REPORTERS = 100
-ITERMAX = 5
+ITERMAX = 50
 SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best
@@ -326,11 +326,11 @@ end
 sensitivity(ltr::Range, vtr::Real) = sensitivity(ltr, vtr, false)
 sensitivity(ltr::Range) = sensitivity(ltr, VARIANCE)
 
-function jldload(fname::String="sim_2015-02-15T14:05:21.jld")
+function jldload(fname::String="sim_2015-02-15T18:25:59.jld")
     jldopen(fname, "r") do file
         read(file, "sim_data")
     end
 end
 
 # Auto load data from REPL
-~isinteractive() || (sim_data = jldload("sim_2015-02-15T14:05:21.jld"))
+~isinteractive() || (sim_data = jldload("sim_2015-02-15T18:25:59.jld"))
