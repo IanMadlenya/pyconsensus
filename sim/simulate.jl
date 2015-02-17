@@ -9,7 +9,7 @@ using JointMoments
 
 EVENTS = 50
 REPORTERS = 100
-ITERMAX = 1000
+ITERMAX = 10
 SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best for fixed-variance,
@@ -23,7 +23,7 @@ RESPONSES = -1:1
 
 # Collusion: 0.2 => 20% chance liar will copy another liar
 # (todo: make this % chance to copy any user, not just liars)
-COLLUDE = 0.3
+COLLUDE = 0.0
 INDISCRIMINATE = false
 VERBOSE = false
 CONSPIRACY = false
@@ -36,7 +36,7 @@ ALGOS = [
     # "ica-prewhitened",
     # "inverse-scores",
     # "fixed-var-length",
-    "covariance",
+    # "covariance-ratio",
     # "fourth-cumulant",
     # "ica-tensor",
 ]
@@ -269,6 +269,7 @@ function sensitivity(liar_threshold_range::Range,
     @inbounds for algo in ALGOS
         res[algo] = Dict()
         @inbounds for s in STATISTICS
+            res[algo][s] = Dict()
             @inbounds for m in METRICS
                 res[algo][s][m] = zeros(gridrows, gridcols)
             end

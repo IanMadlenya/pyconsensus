@@ -340,12 +340,21 @@ class Oracle(object):
                     except:
                         continue
 
-        elif self.algorithm == "covariance":
+        elif self.algorithm == "covariance-ratio":
             # Sum over all events in the ballot; the ratio of this sum to
             # the total covariance (over all events, across all reporters)
             # is each reporter's contribution to the overall variability.
 
-            # Sum across columns of the covariance matrix
+            row_mean = np.mean(reports_filled, axis=1)
+            centered = np.zeros(reports_filled.shape)
+            for i in range(self.num_reporters): centered[i,:] = reports_filled[i,:] - np.ones(self.num_events)*row_mean[i]
+            covm = np.ma.multiply(centered, np.ones(self.num_events)).dot(centered) / float(1 - np.sum(self.reputation**2))
+
+            # Compute the unbiased weighted population covariance
+            # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
+            covariance_matrix = np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation) / float(1 - np.sum(self.reputation**2))
+
+            # Sum across columns of the (other) covariance matrix
             contrib = np.sum(covariance_matrix, 1)
             relative_contrib = contrib / np.sum(contrib)
 
@@ -439,7 +448,6 @@ class Oracle(object):
 
         # ica kurtosis threshold?
         # use covariance matrix sum-over-rows directly, rather than pca?
-        # exact (tensor diagonalization) ICA, instead of FastICA?
 
         row_reward_weighted = self.reputation
         if max(abs(net_adj_prin_comp)) != 0:
