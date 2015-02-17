@@ -3,22 +3,28 @@ using DataFrames
 using Dates
 using Debug
 using HDF5, JLD
+using JointMoments
 
 @pyimport pyconsensus
 
 EVENTS = 50
 REPORTERS = 100
-ITERMAX = 50
+ITERMAX = 1000
 SQRTN = sqrt(ITERMAX)
 
-# Empirically, 90% variance threshold seems best
-# for fixed-variance, 75% for fixed-var-length
+# Empirically, 90% variance threshold seems best for fixed-variance,
+# 75% for fixed-var-length
 VARIANCE = 0.9
 DISTORT = 0
 
+# Range of possible responses
+# -1:1 for {-1, 0, 1}, -1:2:1 for {-1, 1}, etc.
+RESPONSES = -1:1
+
 # Collusion: 0.2 => 20% chance liar will copy another liar
 # (todo: make this % chance to copy any user, not just liars)
-COLLUDE = 0.0
+COLLUDE = 0.3
+INDISCRIMINATE = false
 VERBOSE = false
 CONSPIRACY = false
 ALLWRONG = false
@@ -26,16 +32,21 @@ ALGOS = [
     "first-component",
     "fixed-variance",
     "ica-adjusted",
-    "ica-inverse",
+    # "ica-inverse",
     # "ica-prewhitened",
     # "inverse-scores",
-    "fixed-var-length",
+    # "fixed-var-length",
+    "covariance",
+    # "fourth-cumulant",
+    # "ica-tensor",
 ]
 METRICS = [
     "beats",
     "liars_bonus",
     "correct",
+    "components",
 ]
+STATISTICS = ["mean", "stderr"]
 
 function compute_metrics(data::Dict{Symbol,Any},
                          outcomes::Array{Any,1},
@@ -91,7 +102,7 @@ function generate_data(collusion::Real,
         num_liars = length(liars)
     end
 
-    correct_answers = rand(-1:1, EVENTS)
+    correct_answers = rand(RESPONSES, EVENTS)
 
     # True: always report correct answer
     reports = zeros(REPORTERS, EVENTS)
@@ -100,19 +111,19 @@ function generate_data(collusion::Real,
     # Distort: sometimes report incorrect answers at random
     distmask = rand(num_distorts, EVENTS) .< DISTORT
     correct = convert(Array{Float64,2}, repmat(correct_answers', num_distorts))
-    randomized = convert(Array{Float64,2}, rand(-1:1, num_distorts, EVENTS))
+    randomized = convert(Array{Float64,2}, rand(RESPONSES, num_distorts, EVENTS))
     reports[distorts,:] = correct.*~distmask + randomized.*distmask
 
     # Liar: report answers at random (but with a high chance
     #       of being equal to other liars' answers)
-    reports[liars,:] = convert(Array{Float64,2}, rand(-1:1, num_liars, EVENTS))
+    reports[liars,:] = convert(Array{Float64,2}, rand(RESPONSES, num_liars, EVENTS))
 
     # Alternate: liars always answer incorrectly
     if ALLWRONG
         @inbounds for i = 1:num_liars
             @inbounds for j = 1:EVENTS
                 @inbounds while reports[liars[i],j] == correct_answers[j]
-                    reports[liars[i],j] = rand(-1:1)
+                    reports[liars[i],j] = rand(RESPONSES)
                 end
             end
         end
@@ -153,6 +164,12 @@ function generate_data(collusion::Real,
         end
     end
     
+    # Auxiliary data processing: joint moment tensors
+    aux = [
+        :coskew => coskew(reports; standardize=true, bias=1),
+        :cokurt => cokurt(reports; standardize=true, bias=1),
+    ]
+
     ~VERBOSE || display([reporters reports])
     [
         :reports => reports,
@@ -166,6 +183,7 @@ function generate_data(collusion::Real,
         :num_distorts => num_distorts,
         :num_liars => num_liars,
         :honesty => honesty,
+        :aux => aux,
     ]
 end
 
@@ -178,9 +196,9 @@ function simulate(liar_threshold::Real;
     B = Dict()
     @inbounds for algo in ALGOS
         B[algo] = Dict()
-        B[algo]["liars_bonus"] = (Float64)[]
-        B[algo]["beats"] = (Float64)[]
-        B[algo]["correct"] = (Float64)[]
+        for m in METRICS
+            B[algo][m] = (Float64)[]
+        end
     end
     @inbounds while i <= ITERMAX
         data = generate_data(
@@ -189,7 +207,7 @@ function simulate(liar_threshold::Real;
             variance_threshold=variance_threshold,
         )
 
-        # consensus
+        # Use pyconsensus to find consensus
         A = Dict()
         @inbounds for algo in ALGOS
             A[algo] = { "convergence" => false }
@@ -200,6 +218,7 @@ function simulate(liar_threshold::Real;
                     reputation=data[:reputation],
                     alpha=1.0,
                     variance_threshold=variance_threshold,
+                    aux=data[:aux],
                     algorithm=algo,
                 )[:consensus]()
                 metrics = compute_metrics(
@@ -211,6 +230,7 @@ function simulate(liar_threshold::Real;
             push!(B[algo]["liars_bonus"], metrics[:liars_bonus])
             push!(B[algo]["beats"], metrics[:beats])
             push!(B[algo]["correct"], metrics[:correct])
+            push!(B[algo]["components"], A[algo]["components"])
         end
 
         push!(iterate, i)
@@ -227,11 +247,13 @@ function simulate(liar_threshold::Real;
                 "liars_bonus" => mean(B[algo]["liars_bonus"]),
                 "beats" => mean(B[algo]["beats"]),
                 "correct" => mean(B[algo]["correct"]),
+                "components" => mean(B[algo]["components"]),
             ],
             "stderr" => [
                 "liars_bonus" => std(B[algo]["liars_bonus"]) / SQRTN,
                 "beats" => std(B[algo]["beats"]) / SQRTN,
-                "correct" => std(B[algo]["correct"]) / SQRTN,  
+                "correct" => std(B[algo]["correct"]) / SQRTN,
+                "components" => std(B[algo]["components"]) / SQRTN,
             ],
         ]
     end
@@ -245,18 +267,12 @@ function sensitivity(liar_threshold_range::Range,
     gridrows = length(liar_threshold_range)
     gridcols = length(variance_threshold_range)
     @inbounds for algo in ALGOS
-        res[algo] = [
-            "mean" => [
-                "liars_bonus" => zeros(gridrows, gridcols),
-                "beats" => zeros(gridrows, gridcols),
-                "correct" => zeros(gridrows, gridcols),
-            ],
-            "stderr" => [
-                "liars_bonus" => zeros(gridrows, gridcols),
-                "beats" => zeros(gridrows, gridcols),
-                "correct" => zeros(gridrows, gridcols),
-            ]
-        ]
+        res[algo] = Dict()
+        @inbounds for s in STATISTICS
+            @inbounds for m in METRICS
+                res[algo][s][m] = zeros(gridrows, gridcols)
+            end
+        end
     end
     @inbounds for (row, liar_threshold) in enumerate(liar_threshold_range)
         println("liar_threshold: ", liar_threshold)
@@ -269,10 +285,10 @@ function sensitivity(liar_threshold_range::Range,
                              variance_threshold=variance_threshold,
                              collusion=COLLUDE)
                 @inbounds for algo in ALGOS
-                    for s in ("mean", "stderr")
-                        @inbounds res[algo][s]["liars_bonus"][row,col] = C[algo][s]["liars_bonus"]
-                        @inbounds res[algo][s]["beats"][row,col] = C[algo][s]["beats"]
-                        @inbounds res[algo][s]["correct"][row,col] = C[algo][s]["correct"]
+                    for s in STATISTICS
+                        for m in METRICS
+                            @inbounds res[algo][s][m][row,col] = C[algo][s][m]
+                        end
                     end
                 end
             end
@@ -280,10 +296,10 @@ function sensitivity(liar_threshold_range::Range,
             C = simulate(liar_threshold, collusion=COLLUDE)
             res["iterate"] = C["iterate"]
             @inbounds for algo in ALGOS
-                for s in ("mean", "stderr")
-                    @inbounds res[algo][s]["liars_bonus"][row,1] = C[algo][s]["liars_bonus"]
-                    @inbounds res[algo][s]["beats"][row,1] = C[algo][s]["beats"]
-                    @inbounds res[algo][s]["correct"][row,1] = C[algo][s]["correct"]
+                for s in STATISTICS
+                    for m in METRICS
+                        @inbounds res[algo][s][m][row,1] = C[algo][s][m]
+                    end
                 end
             end
         end
@@ -300,6 +316,8 @@ function sensitivity(liar_threshold_range::Range,
         "distort" => DISTORT,
         "conspiracy" => CONSPIRACY,
         "allwrong" => ALLWRONG,
+        "responses" => RESPONSES,
+        "indiscriminate" => INDISCRIMINATE,
         "algos" => ALGOS,
         "metrics" => METRICS,
         "parametrize" => parametrize,
@@ -312,9 +330,11 @@ function sensitivity(liar_threshold_range::Range,
             "liars_bonus" => res[algo]["mean"]["liars_bonus"],
             "beats" => res[algo]["mean"]["beats"],
             "correct" => res[algo]["mean"]["correct"],
+            "components" => res[algo]["mean"]["components"],
             "liars_bonus_std" => res[algo]["stderr"]["liars_bonus"],
             "beats_std" => res[algo]["stderr"]["beats"],
             "correct_std" => res[algo]["stderr"]["correct"],
+            "components_std" => res[algo]["stderr"]["components"],
         ]
     end
     jldopen("sim_" * repr(now()) * ".jld", "w") do file

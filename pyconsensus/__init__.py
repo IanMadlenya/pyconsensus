@@ -59,7 +59,7 @@ np.set_printoptions(linewidth=225,
 class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
-                 catch_tolerance=0.1, alpha=0.1, verbose=False,
+                 catch_tolerance=0.1, alpha=0.1, verbose=False, aux=None,
                  algorithm="first-component", variance_threshold=0.9):
         """
         Args:
@@ -81,6 +81,8 @@ class Oracle(object):
         self.verbose = verbose
         self.algorithm = algorithm
         self.variance_threshold = variance_threshold
+        self.num_components = -1
+        self.aux = aux
         if reputation is None:
             self.weighted = False
             self.total_rep = self.num_reporters
@@ -160,6 +162,7 @@ class Oracle(object):
 
         """
         convergence = False
+        net_adj_prin_comp = None
 
         # Compute the weighted mean (of all reporters) for each event
         weighted_mean = np.ma.average(reports_filled,
@@ -204,6 +207,7 @@ class Oracle(object):
                 if var_exp > self.variance_threshold: break
             if self.verbose:
                 print i, "components"
+            self.num_components = i
             length = np.sqrt(length)
             set1 = length + np.abs(np.min(length))
             set2 = length - np.max(length)
@@ -230,6 +234,7 @@ class Oracle(object):
                 if var_exp > self.variance_threshold: break
             if self.verbose:
                 print i, "components"
+            self.num_components = i
             set1 = net_score + np.abs(np.min(net_score))
             set2 = net_score - np.max(net_score)
             old = np.dot(self.reputation.T, reports_filled)
@@ -334,6 +339,103 @@ class Oracle(object):
                             convergence = not any(np.isnan(net_adj_prin_comp))
                     except:
                         continue
+
+        elif self.algorithm == "covariance":
+            # Sum over all events in the ballot; the ratio of this sum to
+            # the total covariance (over all events, across all reporters)
+            # is each reporter's contribution to the overall variability.
+
+            # Sum across columns of the covariance matrix
+            contrib = np.sum(covariance_matrix, 1)
+            relative_contrib = contrib / np.sum(contrib)
+
+            set1 = relative_contrib + np.abs(np.min(relative_contrib))
+            set2 = relative_contrib - np.max(relative_contrib)
+            old = np.dot(self.reputation.T, reports_filled)
+            new1 = np.dot(self.normalize(set1), reports_filled)
+            new2 = np.dot(self.normalize(set2), reports_filled)
+            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+            net_adj_prin_comp = set1 if ref_ind <= 0 else set2
+
+            convergence = True
+
+        elif self.algorithm == "fourth-cumulant":
+            if aux is not None:
+                if "cokurt" in aux:
+                    self.cokurt = aux["cokurt"]
+                if "coskew" in aux:
+                    self.coskew = aux["coskew"]
+
+                # Sum over all events in the ballot; the ratio of this sum to
+                # the total cokurtosis is that reporter's contribution.
+                convergence = True
+
+        elif self.algorithm == "ica-tensor":
+            convergence = True
+            # # Tensor-decomposition ICA (Maple -- see tensor-ICA.mw)
+            # x1 := proc (t) options operator, arrow; sqrt(2)*sin(t) end proc;
+            # x2 := proc (t) options operator, arrow; signum(sin(2*t)) end proc;
+            # plot([x1(t), x2(t)], t = 0 .. 4*Pi, numpoints = 5000);
+            # (int(x1(t)^4, t = 0 .. 4*Pi))/(4*Pi)-3*((int(x1(t)^2, t = 0 .. 4*Pi))/(4*Pi))^2;
+            # (int(x2(t)^4, t = 0 .. 4*Pi))/(4*Pi)-3*((int(x2(t)^2, t = 0 .. 4*Pi))/(4*Pi))^2;
+            # M := (1/4)*Matrix([[-1, -3*sqrt(3)], [3*sqrt(3), -5]]);
+            # lambda, V := Eigenvectors(Transpose(M).M);
+            # Sigma := map(sqrt, DiagonalMatrix(lambda));
+            # v1 := Vector([V[1, 1], V[2, 1]]); v2 := Vector([V[1, 2], V[2, 2]]);
+            # v1 := Normalize(v1, Euclidean); v2 := Normalize(v2, Euclidean);
+            # V := Matrix([v1, v2]);
+            # U := M.V.(1/Sigma);
+            # U.Sigma.Transpose(V); Transpose(U).M.V;
+            # y := M.Vector([x1(t), x2(t)]);
+            # plot([y[1], y[2]], t = 0 .. 4*Pi);
+
+            # # use SVD of M to expand y using the columns of U (or V`^(T)) --
+            # # this is y as a linear combination of the principal components of M
+            # z := simplify(1/Sigma.Transpose(U).y);
+            # plot([z[1], z[2]], t = 0 .. 4*Pi);
+            # (int(z[1]*z[2], t = 0 .. 4*Pi))/(4*Pi);
+
+            # # these are uncorrelated, but clearly are not the original
+            # # signals x1(t) and x2(t)
+            # # - the problem is that ANY orthogonal rotation of z results in
+            # #   mutually uncorrelated signals
+            # # - in other words, there is a particular (unknown) orthogonal
+            # #   rotation of x that gives z
+            # # - to find it, set up the fourth-order supersymmetric cumulant
+            # #   tensor:
+            # #   E{1,2,3,4} - E{1,2}⋅E{3,4} - E{1,3}⋅E{2,4} - E{1,4}⋅E{2,3}
+            # a[1, 1, 1, 1] := (int(z[1]^4, t = 0 .. 4*Pi))/(4*Pi)-3*((int(z[1]^2, t = 0 .. 4*Pi))/(4*Pi))^2;
+            # a[1, 1, 1, 2] := (int(z[1]^3*z[2], t = 0 .. 4*Pi))/(4*Pi)-3*(int(z[1]^2, t = 0 .. 4*Pi))/(4*Pi)*((int(z[1]*z[2], t = 0 .. 4*Pi))/(4*Pi));
+            # a[1, 1, 2, 1] := a[1, 1, 1, 2]; a[1, 2, 1, 1] := a[1, 1, 1, 2]; a[2, 1, 1, 1] := a[1, 1, 1, 2];
+            # a[1, 1, 2, 2] := (int(z[1]^2*z[2]^2, t = 0 .. 4*Pi))/(4*Pi)-(int(z[1]^2, t = 0 .. 4*Pi))/(4*Pi)*((int(z[2]^2, t = 0 .. 4*Pi))/(4*Pi))-2*((int(z[1]*z[2], t = 0 .. 4*Pi))/(4*Pi))^2;
+            # a[1, 2, 1, 2] := a[1, 1, 2, 2]; a[1, 2, 2, 1] := a[1, 1, 2, 2]; a[2, 1, 2, 1] := a[1, 1, 2, 2]; a[2, 2, 1, 1] := a[1, 1, 2, 2]; a[2, 1, 1, 2] := a[1, 1, 2, 2];
+            # a[1, 2, 2, 2] := (int(z[1]*z[2]^3, t = 0 .. 4*Pi))/(4*Pi)-3*(int(z[2]^2, t = 0 .. 4*Pi))/(4*Pi)*((int(z[1]*z[2], t = 0 .. 4*Pi))/(4*Pi));
+            # a[2, 1, 2, 2] := a[1, 2, 2, 2]; a[2, 2, 1, 2] := a[1, 2, 2, 2]; a[2, 2, 2, 1] := a[1, 2, 2, 2];
+            # a[2, 2, 2, 2] := (int(z[2]^4, t = 0 .. 4*Pi))/(4*Pi)-3*((int(z[2]^2, t = 0 .. 4*Pi))/(4*Pi))^2;
+            # c1 := proc (i2, i3, i4) options operator, arrow; 4*i2-6+2*i3+i4 end proc;
+            # c2 := proc (i1, i3, i4) options operator, arrow; 4*i3-6+2*i4+i1 end proc;
+            # c3 := proc (i1, i2, i4) options operator, arrow; 4*i4-6+2*i1+i2 end proc;
+            # c4 := proc (i1, i2, i3) options operator, arrow; 4*i1-6+2*i2+i3 end proc;
+            # A1 := Matrix(2, 8); A2 := Matrix(2, 8); A3 := Matrix(2, 8); A4 := Matrix(2, 8);
+            # for j to 2 do
+            #     for k to 2 do
+            #         for l to 2 do
+            #             for m to 2 do
+            #                     A1[j, c1(k, l, m)] := a[j, k, l, m];
+            #                     A2[k, c2(j, l, m)] := a[j, k, l, m];
+            #                     A3[l, c3(j, k, m)] := a[j, k, l, m];
+            #                     A4[m, c4(j, k, l)] := a[j, k, l, m]
+            #             end do
+            #         end do
+            #     end do
+            # end do;
+            # lambda, Vx := Eigenvectors(A1.Transpose(A1));
+            # vx1 := Vector([Vx[1, 1], Vx[2, 1]]); vx2 := Vector([Vx[1, 2], Vx[2, 2]]);
+            # vx1 := Normalize(vx1, Euclidean); vx2 := Normalize(vx2, Euclidean);
+            # Vnorm := Matrix([vx1, vx2]);
+            # Mhat := U.Sigma.Transpose(Vnorm);
+            # finalx := simplify(1/Mhat.y);
+            # plot([finalx[1], finalx[2]], t = 0 .. 4*Pi, numpoints = 2000);
 
         # ica kurtosis threshold?
         # use covariance matrix sum-over-rows directly, rather than pca?
@@ -460,6 +562,7 @@ class Oracle(object):
             'participation': 1 - percent_na,
             'avg_certainty': avg_certainty,
             'convergence': player_info['convergence'],
+            'components': self.num_components,
         }
 
 def main(argv=None):

@@ -1,7 +1,7 @@
 using Gadfly
 
 num_algos = length(sim_data["algos"])
-num_metrics = length(sim_data["metrics"])
+num_metrics = length(sim_data["metrics"]) - 1  # -1 for components
 gridrows = length(sim_data["liar_threshold"])
 
 # Build plotting dataframe
@@ -58,7 +58,7 @@ df = DataFrame(metric=metrics[:],
 # Plot metrics vs liar_threshold parameter
 set_default_plot_size(12inch, 7inch)
 optstr = ""
-for flag in ("conspiracy", "allwrong")
+for flag in ("conspiracy", "allwrong", "indiscriminate")
     optstr *= (sim_data[flag]) ? " $flag" : ""
 end
 infoblurb = string(
@@ -70,7 +70,7 @@ infoblurb = string(
     " iterations)",
     " collude=",
     sim_data["collude"],
-    " variance=",
+    " variance_threshold=",
     sim_data["variance_threshold"],
     optstr,
 )
