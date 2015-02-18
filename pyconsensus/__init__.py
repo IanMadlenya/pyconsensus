@@ -371,11 +371,11 @@ class Oracle(object):
         # the total cokurtosis is that reporter's contribution.
         elif self.algorithm == "fourth-cumulant":
             if self.aux is not None and "cokurt" in self.aux:
-                cokurt = self.aux["cokurt"]
-                contrib = np.sum(np.sum(np.sum(cokurt, axis=0), axis=0), axis=0)
-                relative_contrib = contrib / np.sum(contrib)
-                set1 = relative_contrib + np.abs(np.min(relative_contrib))
-                set2 = relative_contrib - np.max(relative_contrib)
+                cokurt_contrib = self.aux["cokurt"]
+                # contrib = np.sum(np.sum(np.sum(cokurt, axis=0), axis=0), axis=0)
+                # relative_contrib = cokurt_contrib / np.sum(cokurt_contrib)
+                set1 = cokurt_contrib + np.abs(np.min(cokurt_contrib))
+                set2 = cokurt_contrib - np.max(cokurt_contrib)
                 old = np.dot(self.reputation.T, reports_filled)
                 new1 = np.dot(self.normalize(set1), reports_filled)
                 new2 = np.dot(self.normalize(set2), reports_filled)

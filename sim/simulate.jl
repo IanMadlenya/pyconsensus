@@ -7,8 +7,8 @@ using JointMoments
 
 @pyimport pyconsensus
 
-EVENTS = 50
-REPORTERS = 100
+EVENTS = 25
+REPORTERS = 50
 ITERMAX = 25
 SQRTN = sqrt(ITERMAX)
 
@@ -29,14 +29,14 @@ VERBOSE = false
 CONSPIRACY = false
 ALLWRONG = false
 ALGOS = [
-    "first-component",
-    "fixed-variance",
+    # "first-component",
+    # "fixed-variance",
     # "ica-adjusted",
     # "ica-inverse",
     # "ica-prewhitened",
     # "inverse-scores",
     # "fixed-var-length",
-    "covariance-ratio",
+    # "covariance-ratio",
     "fourth-cumulant",
     # "ica-tensor",
 ]
@@ -181,7 +181,7 @@ function generate_data(collusion::Real,
     ]
 end
 
-function simulate(liar_threshold::Real;
+@debug function simulate(liar_threshold::Real;
                   variance_threshold::Real=VARIANCE,
                   collusion::Real=COLLUDE)
     iterate = (Int64)[]
@@ -208,12 +208,10 @@ function simulate(liar_threshold::Real;
             metrics = Dict()
             while ~A[algo]["convergence"]
                 if algo == "fourth-cumulant"
-
-                    # Joint central moment tensors
-                    data[:aux] = [
-                        # :coskew => coskew(data[:reports]; standardize=true, bias=1),
-                        :cokurt => cokurt(data[:reports]; standardize=true, bias=1),
-                    ]
+                    # Joint central moment tensor
+                    tensor = cokurt(data[:reports]'; standardize=true, bias=1)
+                    contrib = sum(sum(sum(tensor, 4), 3), 2)[:]
+                    data[:aux] = [ :cokurt => contrib / sum(contrib) ]
                 end
                 A[algo] = pyconsensus.Oracle(
                     reports=data[:reports],
@@ -236,9 +234,9 @@ function simulate(liar_threshold::Real;
         end
 
         push!(iterate, i)
-        if VERBOSE
+        # if VERBOSE
             (i == ITERMAX) || (i % 10 == 0) ? println('.') : print('.')
-        end
+        # end
         i += 1
     end
 

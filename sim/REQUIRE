@@ -2,3 +2,6 @@ julia 0.3-
 PyCall
 DataFrames
 JointMoments
+Debug
+HDF5
+Gadfly
