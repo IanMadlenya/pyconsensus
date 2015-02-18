@@ -340,10 +340,10 @@ class Oracle(object):
                     except:
                         continue
 
+        # Sum over all events in the ballot; the ratio of this sum to
+        # the total covariance (over all events, across all reporters)
+        # is each reporter's contribution to the overall variability.
         elif self.algorithm == "covariance-ratio":
-            # Sum over all events in the ballot; the ratio of this sum to
-            # the total covariance (over all events, across all reporters)
-            # is each reporter's contribution to the overall variability.
             row_mean = np.mean(reports_filled, axis=1)
             centered = np.zeros(reports_filled.shape)
             onesvect = np.ones(self.num_events)
@@ -351,7 +351,6 @@ class Oracle(object):
                 centered[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
 
             # Unweighted: np.dot(centered, centered.T) / self.num_events
-            # import ipdb; ipdb.set_trace()
             covmat = np.dot(np.ma.multiply(centered.T, self.reputation).T, np.ma.multiply(centered.T, self.reputation)) / float(1 - np.sum(self.reputation**2))
 
             # Sum across columns of the (other) covariance matrix
@@ -368,15 +367,20 @@ class Oracle(object):
 
             convergence = True
 
+        # Sum over all events in the ballot; the ratio of this sum to
+        # the total cokurtosis is that reporter's contribution.
         elif self.algorithm == "fourth-cumulant":
-            if aux is not None:
-                if "cokurt" in aux:
-                    self.cokurt = aux["cokurt"]
-                if "coskew" in aux:
-                    self.coskew = aux["coskew"]
-
-                # Sum over all events in the ballot; the ratio of this sum to
-                # the total cokurtosis is that reporter's contribution.
+            if self.aux is not None and "cokurt" in self.aux:
+                cokurt = self.aux["cokurt"]
+                contrib = np.sum(np.sum(np.sum(cokurt, axis=0), axis=0), axis=0)
+                relative_contrib = contrib / np.sum(contrib)
+                set1 = relative_contrib + np.abs(np.min(relative_contrib))
+                set2 = relative_contrib - np.max(relative_contrib)
+                old = np.dot(self.reputation.T, reports_filled)
+                new1 = np.dot(self.normalize(set1), reports_filled)
+                new2 = np.dot(self.normalize(set2), reports_filled)
+                ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+                net_adj_prin_comp = set1 if ref_ind <= 0 else set2
                 convergence = True
 
         elif self.algorithm == "ica-tensor":

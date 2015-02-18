@@ -9,7 +9,7 @@ using JointMoments
 
 EVENTS = 50
 REPORTERS = 100
-ITERMAX = 500
+ITERMAX = 25
 SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best for fixed-variance,
@@ -37,7 +37,7 @@ ALGOS = [
     # "inverse-scores",
     # "fixed-var-length",
     "covariance-ratio",
-    # "fourth-cumulant",
+    "fourth-cumulant",
     # "ica-tensor",
 ]
 METRICS = [
@@ -49,8 +49,8 @@ METRICS = [
 STATISTICS = ["mean", "stderr"]
 
 function compute_metrics(data::Dict{Symbol,Any},
-                         outcomes::Array{Any,1},
-                         this_rep::Array{Float64,1})
+                         outcomes::Vector{Any},
+                         this_rep::Vector{Float64})
 
     # "this_rep" is the reputation awarded this round (before smoothing)
     liars_bonus = this_rep - this_rep[first(find(data[:reporters] .== "true"))]
@@ -106,17 +106,17 @@ function generate_data(collusion::Real,
 
     # True: always report correct answer
     reports = zeros(REPORTERS, EVENTS)
-    reports[trues,:] = convert(Array{Float64,2}, repmat(correct_answers', num_trues))
+    reports[trues,:] = convert(Matrix{Float64}, repmat(correct_answers', num_trues))
 
     # Distort: sometimes report incorrect answers at random
     distmask = rand(num_distorts, EVENTS) .< DISTORT
-    correct = convert(Array{Float64,2}, repmat(correct_answers', num_distorts))
-    randomized = convert(Array{Float64,2}, rand(RESPONSES, num_distorts, EVENTS))
+    correct = convert(Matrix{Float64}, repmat(correct_answers', num_distorts))
+    randomized = convert(Matrix{Float64}, rand(RESPONSES, num_distorts, EVENTS))
     reports[distorts,:] = correct.*~distmask + randomized.*distmask
 
     # Liar: report answers at random (but with a high chance
     #       of being equal to other liars' answers)
-    reports[liars,:] = convert(Array{Float64,2}, rand(RESPONSES, num_liars, EVENTS))
+    reports[liars,:] = convert(Matrix{Float64}, rand(RESPONSES, num_liars, EVENTS))
 
     # Alternate: liars always answer incorrectly
     if ALLWRONG
@@ -164,12 +164,6 @@ function generate_data(collusion::Real,
         end
     end
     
-    # Auxiliary data processing: joint moment tensors
-    aux = [
-        # :coskew => coskew(reports; standardize=true, bias=1),
-        # :cokurt => cokurt(reports; standardize=true, bias=1),
-    ]
-
     ~VERBOSE || display([reporters reports])
     [
         :reports => reports,
@@ -183,7 +177,7 @@ function generate_data(collusion::Real,
         :num_distorts => num_distorts,
         :num_liars => num_liars,
         :honesty => honesty,
-        :aux => aux,
+        :aux => nothing,
     ]
 end
 
@@ -213,6 +207,14 @@ function simulate(liar_threshold::Real;
             A[algo] = { "convergence" => false }
             metrics = Dict()
             while ~A[algo]["convergence"]
+                if algo == "fourth-cumulant"
+
+                    # Joint central moment tensors
+                    data[:aux] = [
+                        # :coskew => coskew(data[:reports]; standardize=true, bias=1),
+                        :cokurt => cokurt(data[:reports]; standardize=true, bias=1),
+                    ]
+                end
                 A[algo] = pyconsensus.Oracle(
                     reports=data[:reports],
                     reputation=data[:reputation],
