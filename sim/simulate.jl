@@ -9,7 +9,7 @@ using JointMoments
 
 EVENTS = 50
 REPORTERS = 100
-ITERMAX = 10
+ITERMAX = 500
 SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best for fixed-variance,
@@ -23,7 +23,7 @@ RESPONSES = -1:1
 
 # Collusion: 0.2 => 20% chance liar will copy another liar
 # (todo: make this % chance to copy any user, not just liars)
-COLLUDE = 0.0
+COLLUDE = 0.3
 INDISCRIMINATE = false
 VERBOSE = false
 CONSPIRACY = false
@@ -31,12 +31,12 @@ ALLWRONG = false
 ALGOS = [
     "first-component",
     "fixed-variance",
-    "ica-adjusted",
+    # "ica-adjusted",
     # "ica-inverse",
     # "ica-prewhitened",
     # "inverse-scores",
     # "fixed-var-length",
-    # "covariance-ratio",
+    "covariance-ratio",
     # "fourth-cumulant",
     # "ica-tensor",
 ]
@@ -166,8 +166,8 @@ function generate_data(collusion::Real,
     
     # Auxiliary data processing: joint moment tensors
     aux = [
-        :coskew => coskew(reports; standardize=true, bias=1),
-        :cokurt => cokurt(reports; standardize=true, bias=1),
+        # :coskew => coskew(reports; standardize=true, bias=1),
+        # :cokurt => cokurt(reports; standardize=true, bias=1),
     ]
 
     ~VERBOSE || display([reporters reports])
