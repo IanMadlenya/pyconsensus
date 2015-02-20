@@ -7,9 +7,9 @@ using JointMoments
 
 @pyimport pyconsensus
 
-const EVENTS = 25
-const REPORTERS = 50
-const ITERMAX = 25
+const EVENTS = 50
+const REPORTERS = 100
+const ITERMAX = 500
 const SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best for fixed-variance,
@@ -31,14 +31,8 @@ const ALLWRONG = false
 const ALGOS = [
     "first-component",
     "fixed-variance",
-    # "ica-adjusted",
-    # "ica-inverse",
-    # "ica-prewhitened",
-    # "inverse-scores",
-    # "fixed-var-length",
     "covariance-ratio",
     "fourth-cumulant",
-    # "ica-tensor",
 ]
 const METRICS = [
     "beats",
@@ -213,7 +207,7 @@ end
                         data[:reports]';
                         standardize=true,
                         bias=1,
-                        dense=false,
+                        dense=true,
                     )
                     contrib = sum(sum(sum(tensor, 4), 3), 2)[:]
                     data[:aux] = [ :cokurt => contrib / sum(contrib) ]
