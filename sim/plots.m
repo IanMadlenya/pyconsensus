@@ -1,10 +1,10 @@
-players = importdata('50x25.players');
-reports = importdata('50x25.dat');
+players = importdata('data/50x25.players');
+reports = importdata('data/50x25.dat');
 
 liars = find(strcmp(players, 'liar'));
 
 old_rep = zeros(50,1) + 0.02;
-reputation = importdata('50x25.rep');
+reputation = importdata('data/50x25.rep');
 
 delta_rep = reputation - old_rep;
 

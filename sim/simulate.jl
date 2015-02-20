@@ -343,7 +343,7 @@ function sensitivity(liar_threshold_range::Range,
             "components_std" => res[algo]["stderr"]["components"],
         ]
     end
-    jldopen("sim_" * repr(now()) * ".jld", "w") do file
+    jldopen("data/sim_" * repr(now()) * ".jld", "w") do file
         write(file, "sim_data", sim_data)
     end
     return sim_data
@@ -352,11 +352,11 @@ end
 sensitivity(ltr::Range, vtr::Real) = sensitivity(ltr, vtr, false)
 sensitivity(ltr::Range) = sensitivity(ltr, VARIANCE)
 
-function jldload(fname::String="sim_2015-02-15T18:25:59.jld")
+function jldload(fname::String)
     jldopen(fname, "r") do file
         read(file, "sim_data")
     end
 end
 
 # Auto load data from REPL
-~isinteractive() || (sim_data = jldload("sim_2015-02-15T18:25:59.jld"))
+~isinteractive() || (sim_data = jldload("data/sim_2015-02-15T18:25:59.jld"))
