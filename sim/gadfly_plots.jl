@@ -1,13 +1,13 @@
 using Gadfly
 
-num_algos = length(sim_data["algos"])
-num_metrics = length(sim_data["metrics"]) - 1  # -1 for components
-gridrows = length(sim_data["liar_threshold"])
+const num_algos = length(sim_data["algos"])
+const num_metrics = length(sim_data["metrics"]) - 1  # -1 for components
+const gridrows = length(sim_data["liar_threshold"])
 
 # Build plotting dataframe
-liar_threshold = repmat(sim_data["liar_threshold"],
-                        num_algos*num_metrics,
-                        1)[:] * 100
+const liar_threshold = repmat(sim_data["liar_threshold"],
+                              num_algos*num_metrics,
+                              1)[:] * 100
 data = (Float64)[]
 algos = (String)[]
 metrics = (String)[]

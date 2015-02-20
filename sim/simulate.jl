@@ -7,46 +7,46 @@ using JointMoments
 
 @pyimport pyconsensus
 
-EVENTS = 25
-REPORTERS = 50
-ITERMAX = 25
-SQRTN = sqrt(ITERMAX)
+const EVENTS = 25
+const REPORTERS = 50
+const ITERMAX = 25
+const SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best for fixed-variance,
 # 75% for fixed-var-length
-VARIANCE = 0.9
-DISTORT = 0
+const VARIANCE = 0.9
+const DISTORT = 0
 
 # Range of possible responses
 # -1:1 for {-1, 0, 1}, -1:2:1 for {-1, 1}, etc.
-RESPONSES = -1:1
+const RESPONSES = -1:1
 
 # Collusion: 0.2 => 20% chance liar will copy another liar
 # (todo: make this % chance to copy any user, not just liars)
-COLLUDE = 0.3
-INDISCRIMINATE = false
-VERBOSE = false
-CONSPIRACY = false
-ALLWRONG = false
-ALGOS = [
-    # "first-component",
-    # "fixed-variance",
+const COLLUDE = 0.3
+const INDISCRIMINATE = false
+const VERBOSE = false
+const CONSPIRACY = false
+const ALLWRONG = false
+const ALGOS = [
+    "first-component",
+    "fixed-variance",
     # "ica-adjusted",
     # "ica-inverse",
     # "ica-prewhitened",
     # "inverse-scores",
     # "fixed-var-length",
-    # "covariance-ratio",
+    "covariance-ratio",
     "fourth-cumulant",
     # "ica-tensor",
 ]
-METRICS = [
+const METRICS = [
     "beats",
     "liars_bonus",
     "correct",
     "components",
 ]
-STATISTICS = ["mean", "stderr"]
+const STATISTICS = ["mean", "stderr"]
 
 function compute_metrics(data::Dict{Symbol,Any},
                          outcomes::Vector{Any},
@@ -208,8 +208,13 @@ end
             metrics = Dict()
             while ~A[algo]["convergence"]
                 if algo == "fourth-cumulant"
-                    # Joint central moment tensor
-                    tensor = cokurt(data[:reports]'; standardize=true, bias=1)
+                    # Cokurtosis tensor
+                    tensor = cokurt(
+                        data[:reports]';
+                        standardize=true,
+                        bias=1,
+                        dense=false,
+                    )
                     contrib = sum(sum(sum(tensor, 4), 3), 2)[:]
                     data[:aux] = [ :cokurt => contrib / sum(contrib) ]
                 end
