@@ -8,4 +8,4 @@ liar_threshold_range = 0.1:0.05:0.9
 
 sim_data = sensitivity(liar_threshold_range)
 
-include("gadfly_plots.jl")
+include("plots.jl")
