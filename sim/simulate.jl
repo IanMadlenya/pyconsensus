@@ -29,10 +29,10 @@ const VERBOSE = false
 const CONSPIRACY = false
 const ALLWRONG = false
 const ALGOS = [
-    "first-component",
+    "sztorc",
     "fixed-variance",
-    "covariance-ratio",
-    "fourth-cumulant",
+    "covariance",
+    "cokurtosis",
 ]
 const METRICS = [
     "beats",
@@ -201,7 +201,7 @@ end
             A[algo] = { "convergence" => false }
             metrics = Dict()
             while ~A[algo]["convergence"]
-                if algo == "fourth-cumulant"
+                if algo == "cokurtosis"
                     # Cokurtosis tensor
                     tensor = cokurt(
                         data[:reports]';
@@ -353,4 +353,4 @@ function jldload(fname::String)
 end
 
 # Auto load data from REPL
-~isinteractive() || (sim_data = jldload("data/sim_2015-02-15T18:25:59.jld"))
+~isinteractive() || (sim_data = jldload("data/sim_2015-02-20T03:28:48.jld"))

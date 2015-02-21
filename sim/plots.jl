@@ -70,8 +70,8 @@ infoblurb = string(
     " iterations)",
     " collude=",
     sim_data["collude"],
-    " variance_threshold=",
-    sim_data["variance_threshold"],
+    # " variance_threshold=",
+    # sim_data["variance_threshold"],
     optstr,
 )
 pl = plot(df,

@@ -60,7 +60,7 @@ class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
                  catch_tolerance=0.1, alpha=0.1, verbose=False, aux=None,
-                 algorithm="first-component", variance_threshold=0.9):
+                 algorithm="sztorc", variance_threshold=0.9):
         """
         Args:
           reports (list-of-lists): reports matrix; rows = reporters, columns = Events.
@@ -183,7 +183,7 @@ class Oracle(object):
         first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
         first_score = np.dot(mean_deviation, first_loading)
 
-        if self.algorithm == "first-component":
+        if self.algorithm == "sztorc":
 
             set1 = first_score + np.abs(np.min(first_score))
             set2 = first_score - np.max(first_score)
@@ -343,7 +343,7 @@ class Oracle(object):
         # Sum over all events in the ballot; the ratio of this sum to
         # the total covariance (over all events, across all reporters)
         # is each reporter's contribution to the overall variability.
-        elif self.algorithm == "covariance-ratio":
+        elif self.algorithm == "covariance":
             row_mean = np.mean(reports_filled, axis=1)
             centered = np.zeros(reports_filled.shape)
             onesvect = np.ones(self.num_events)
@@ -369,7 +369,7 @@ class Oracle(object):
 
         # Sum over all events in the ballot; the ratio of this sum to
         # the total cokurtosis is that reporter's contribution.
-        elif self.algorithm == "fourth-cumulant":
+        elif self.algorithm == "cokurtosis":
             if self.aux is not None and "cokurt" in self.aux:
                 cokurt_contrib = self.aux["cokurt"]
                 # contrib = np.sum(np.sum(np.sum(cokurt, axis=0), axis=0), axis=0)
