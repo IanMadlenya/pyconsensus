@@ -7,7 +7,10 @@ using JointMoments
 
 @pyimport pyconsensus
 
-# todo: randomized reputation values
+# todo:
+#   - label pairs, triples, quadruples
+#   - mix conspiracy with regular collusion
+#   - reward/vote slope
 
 const EVENTS = 25
 const REPORTERS = 50
@@ -22,6 +25,10 @@ const DISTORT = 0
 # Range of possible responses
 # -1:1 for {-1, 0, 1}, -1:2:1 for {-1, 1}, etc.
 const RESPONSES = -1:1
+
+# Allowed initial reputation values
+const REP_RANGE = 1:25
+const REP_RAND = true
 
 # Collusion: 0.2 => 20% chance liar will copy another liar
 # (todo: make this % chance to copy any user, not just liars)
@@ -160,11 +167,12 @@ function generate_data(collusion::Real,
             end
         end
     end
-    
+
+    reputation = (REP_RAND) ? rand(REP_RANGE, REPORTERS) : ones(REPORTERS)
     ~VERBOSE || display([reporters reports])
     [
         :reports => reports,
-        :reputation => ones(REPORTERS),
+        :reputation => reputation,
         :reporters => reporters,
         :correct_answers => correct_answers,
         :trues => trues,
@@ -178,7 +186,7 @@ function generate_data(collusion::Real,
     ]
 end
 
-@debug function simulate(liar_threshold::Real;
+function simulate(liar_threshold::Real;
                   variance_threshold::Real=VARIANCE,
                   collusion::Real=COLLUDE)
     iterate = (Int64)[]
