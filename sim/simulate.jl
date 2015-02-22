@@ -7,9 +7,11 @@ using JointMoments
 
 @pyimport pyconsensus
 
-const EVENTS = 50
-const REPORTERS = 100
-const ITERMAX = 500
+# todo: randomized reputation values
+
+const EVENTS = 25
+const REPORTERS = 50
+const ITERMAX = 10
 const SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best for fixed-variance,
@@ -32,7 +34,8 @@ const ALGOS = [
     "sztorc",
     "fixed-variance",
     "covariance",
-    "cokurtosis",
+    "covariance-replicate",
+    # "cokurtosis",
 ]
 const METRICS = [
     "beats",
