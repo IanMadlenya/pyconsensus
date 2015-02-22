@@ -349,11 +349,32 @@ class Oracle(object):
             row_mean = np.mean(reports_filled, axis=1)
             centered = np.zeros(reports_filled.shape)
             onesvect = np.ones(self.num_events)
-            for i in range(self.num_reporters):
-                centered[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
+            for i in range(self.num_reporters): centered[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
 
             # Unweighted: np.dot(centered, centered.T) / self.num_events
             covmat = np.dot(centered, np.ma.multiply(centered.T, self.reputation)) / float(1 - np.sum(self.reputation**2))
+
+            # Sum across columns of the (other) covariance matrix
+            contrib = np.sum(covmat, 1)
+            relative_contrib = contrib / np.sum(contrib)
+
+            set1 = relative_contrib + np.abs(np.min(relative_contrib))
+            set2 = relative_contrib - np.max(relative_contrib)
+            old = np.dot(self.reputation.T, reports_filled)
+            new1 = np.dot(self.normalize(set1), reports_filled)
+            new2 = np.dot(self.normalize(set2), reports_filled)
+            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+            net_adj_prin_comp = set1 if ref_ind <= 0 else set2
+
+            convergence = True
+
+        elif self.algorithm == "covariance-unweighted":
+            row_mean = np.mean(reports_filled, axis=1)
+            centered = np.zeros(reports_filled.shape)
+            onesvect = np.ones(self.num_events)
+            for i in range(self.num_reporters): centered[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
+
+            covmat = np.dot(centered, centered.T) / self.num_events
 
             # Sum across columns of the (other) covariance matrix
             contrib = np.sum(covmat, 1)
@@ -386,12 +407,16 @@ class Oracle(object):
 
             # Sum across columns of the (other) covariance matrix
             contrib_rpl = np.sum(covmat, 1)
-            relative_contrib_rpl = contrib_rpl / np.sum(contrib_rpl)
+            # relative_contrib_rpl = contrib_rpl / np.sum(contrib_rpl)
             relative_contrib = np.zeros(self.num_reporters)
             row = 0
             for i in range(self.num_reporters):
-                relative_contrib[i] = self.reptokens[i] * relative_contrib_rpl[row]
+                relative_contrib[i] = self.reptokens[i] * contrib_rpl[row]
+                # relative_contrib[i] = contrib_rpl[row] # this gives the same result as "covariance"
                 row += self.reptokens[i]
+            relative_contrib /= np.sum(relative_contrib)
+
+            # import ipdb; ipdb.set_trace()
 
             set1 = relative_contrib + np.abs(np.min(relative_contrib))
             set2 = relative_contrib - np.max(relative_contrib)

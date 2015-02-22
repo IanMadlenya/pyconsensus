@@ -12,9 +12,9 @@ using JointMoments
 #   - mix conspiracy with regular collusion
 #   - reward/vote slope
 
-const EVENTS = 25
-const REPORTERS = 50
-const ITERMAX = 10
+const EVENTS = 50
+const REPORTERS = 100
+const ITERMAX = 50
 const SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best for fixed-variance,
@@ -41,7 +41,8 @@ const ALGOS = [
     "sztorc",
     "fixed-variance",
     "covariance",
-    "covariance-replicate",
+    # "covariance-replicate",
+    "covariance-unweighted",
     # "cokurtosis",
 ]
 const METRICS = [
@@ -141,27 +142,26 @@ function generate_data(collusion::Real,
                 reports[liars[i],:] = reports[liars[1],:]
             end
         end
+    end
 
     # "Ordinary" collusion
-    else
-        @inbounds for i = 1:num_liars-1
+    @inbounds for i = 1:num_liars-1
 
-            # Pairs
-            diceroll = first(rand(1))
-            if diceroll < collusion
-                reports[liars[i],:] = reports[liars[i+1],:]
+        # Pairs
+        diceroll = first(rand(1))
+        if diceroll < collusion
+            reports[liars[i],:] = reports[liars[i+1],:]
 
-                # Triples
-                if i + 2 < num_liars
-                    if diceroll < collusion^2
-                        reports[liars[i],:] = reports[liars[i+2],:]
-                    end
+            # Triples
+            if i + 2 < num_liars
+                if diceroll < collusion^2
+                    reports[liars[i],:] = reports[liars[i+2],:]
+                end
 
-                    # Quadruples
-                    if i + 3 < num_liars
-                        if diceroll < collusion^3
-                            reports[liars[i],:] = reports[liars[i+3],:]
-                        end
+                # Quadruples
+                if i + 3 < num_liars
+                    if diceroll < collusion^3
+                        reports[liars[i],:] = reports[liars[i+3],:]
                     end
                 end
             end
@@ -244,9 +244,9 @@ function simulate(liar_threshold::Real;
         end
 
         push!(iterate, i)
-        # if VERBOSE
+        if VERBOSE
             (i == ITERMAX) || (i % 10 == 0) ? println('.') : print('.')
-        # end
+        end
         i += 1
     end
 
