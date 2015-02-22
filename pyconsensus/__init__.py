@@ -86,12 +86,12 @@ class Oracle(object):
         if reputation is None:
             self.weighted = False
             self.total_rep = self.num_reporters
-            self.reptokens = np.ones(self.num_reporters)
+            self.reptokens = np.ones(self.num_reporters).astype(int)
             self.reputation = np.array([1 / float(self.num_reporters)] * self.num_reporters)
         else:
             self.weighted = True
             self.total_rep = sum(np.array(reputation).ravel())
-            self.reptokens = np.array(reputation).ravel()
+            self.reptokens = np.array(reputation).ravel().astype(int)
             self.reputation = np.array([i / float(self.total_rep) for i in reputation])
 
     def normalize(self, v):
