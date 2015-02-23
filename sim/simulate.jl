@@ -1,7 +1,5 @@
-using PyCall
-using DataFrames
 using Dates
-using Debug
+using PyCall
 using HDF5, JLD
 using JointMoments
 
@@ -10,10 +8,11 @@ using JointMoments
 # todo:
 #   - label pairs, triples, quadruples
 #   - mix conspiracy with regular collusion
-#   - reward/vote slope
+#   - use flattened + sparse cokurtosis tensor
+#   - scalar event resolution (check reward/vote slopes)
 
-const EVENTS = 50
-const REPORTERS = 100
+const EVENTS = 25
+const REPORTERS = 40
 const ITERMAX = 50
 const SQRTN = sqrt(ITERMAX)
 
@@ -27,13 +26,13 @@ const DISTORT = 0
 const RESPONSES = -1:1
 
 # Allowed initial reputation values
-const REP_RANGE = 1:25
+const REP_RANGE = 1:10
 const REP_RAND = true
 
 # Collusion: 0.2 => 20% chance liar will copy another liar
 # (todo: make this % chance to copy any user, not just liars)
 const COLLUDE = 0.3
-const INDISCRIMINATE = false
+const INDISCRIMINATE = true
 const VERBOSE = false
 const CONSPIRACY = false
 const ALLWRONG = false
@@ -41,9 +40,7 @@ const ALGOS = [
     "sztorc",
     "fixed-variance",
     "covariance",
-    # "covariance-replicate",
-    "covariance-unweighted",
-    # "cokurtosis",
+    "cokurtosis",
 ]
 const METRICS = [
     "beats",
@@ -123,7 +120,7 @@ function generate_data(collusion::Real,
     #       of being equal to other liars' answers)
     reports[liars,:] = convert(Matrix{Float64}, rand(RESPONSES, num_liars, EVENTS))
 
-    # Alternate: liars always answer incorrectly
+    # "allwrong": liars always answer incorrectly
     if ALLWRONG
         @inbounds for i = 1:num_liars
             @inbounds for j = 1:EVENTS
@@ -144,24 +141,51 @@ function generate_data(collusion::Real,
         end
     end
 
-    # "Ordinary" collusion
-    @inbounds for i = 1:num_liars-1
+    # Indiscriminate copying: liars copy anyone, not just other liars
+    if INDISCRIMINATE
+        @inbounds for i = 1:num_liars
 
-        # Pairs
-        diceroll = first(rand(1))
-        if diceroll < collusion
-            reports[liars[i],:] = reports[liars[i+1],:]
+            # Pairs
+            diceroll = first(rand(1))
+            if diceroll < collusion
+                target = int(first(rand(1)) * REPORTERS)
+                reports[liars[i],:] = reports[target,:]
 
-            # Triples
-            if i + 2 < num_liars
+                # Triples
                 if diceroll < collusion^2
-                    reports[liars[i],:] = reports[liars[i+2],:]
-                end
+                    target2 = int(first(rand(1)) * REPORTERS)
+                    reports[liars[i],:] = reports[target2,:]
 
-                # Quadruples
-                if i + 3 < num_liars
+                    # Quadruples
                     if diceroll < collusion^3
-                        reports[liars[i],:] = reports[liars[i+3],:]
+                        target3 = int(first(rand(1)) * REPORTERS)
+                        reports[liars[i],:] = reports[target3,:]
+                    end
+                end
+            end
+        end
+
+    # "Ordinary" (ladder) collusion
+    # todo: remove num_liars upper bounds (these decrease collusion probs)
+    else
+        @inbounds for i = 1:num_liars-1
+
+            # Pairs
+            diceroll = first(rand(1))
+            if diceroll < collusion
+                reports[liars[i],:] = reports[liars[i+1],:]
+
+                # Triples
+                if i + 2 < num_liars
+                    if diceroll < collusion^2
+                        reports[liars[i],:] = reports[liars[i+2],:]
+        
+                        # Quadruples
+                        if i + 3 < num_liars
+                            if diceroll < collusion^3
+                                reports[liars[i],:] = reports[liars[i+3],:]
+                            end
+                        end
                     end
                 end
             end

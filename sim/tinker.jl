@@ -1,5 +1,7 @@
 centering(n::Int) = eye(n) - ones(n) * ones(n)' / n
 
+centering{T<:Real}(n::Int, w::Vector{T}) = eye(n) - ones(n) * w'
+
 normalize{T<:Real}(v::Vector{T}) = vec(v) / sum(v)
 
 # B: vote (report) ballot
@@ -26,8 +28,8 @@ r = normalize(ϱ)
 #       Σ = C' * C / num_users for unweighted
 # Centering matrix (centered columns):
 #   B .- mean(B,1) == centering(size(B,1)) * B
-X = B .- (B'*r)'
-Σ = X'*(X.*r) / (1-sum(r.^2))
+X_event = B .- (B' * r)'
+Σ_event = X_event' * (X_event .* r) / (1 - sum(r.^2))
 
 # Per-user covariance matrix
 # Notes:
