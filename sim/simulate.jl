@@ -13,7 +13,7 @@ using JointMoments
 
 const EVENTS = 25
 const REPORTERS = 40
-const ITERMAX = 50
+const ITERMAX = 100
 const SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best for fixed-variance,
@@ -26,7 +26,7 @@ const DISTORT = 0
 const RESPONSES = -1:1
 
 # Allowed initial reputation values
-const REP_RANGE = 1:10
+const REP_RANGE = 1:5
 const REP_RAND = true
 
 # Collusion: 0.2 => 20% chance liar will copy another liar
@@ -148,18 +148,18 @@ function generate_data(collusion::Real,
             # Pairs
             diceroll = first(rand(1))
             if diceroll < collusion
-                target = int(first(rand(1)) * REPORTERS)
-                reports[liars[i],:] = reports[target,:]
+                target = int(ceil(first(rand(1))) * REPORTERS)
+                reports[target,:] = reports[liars[i],:]
 
                 # Triples
                 if diceroll < collusion^2
-                    target2 = int(first(rand(1)) * REPORTERS)
-                    reports[liars[i],:] = reports[target2,:]
+                    target2 = int(ceil(first(rand(1))) * REPORTERS)
+                    reports[target2,:] = reports[liars[i],:]
 
                     # Quadruples
                     if diceroll < collusion^3
-                        target3 = int(first(rand(1)) * REPORTERS)
-                        reports[liars[i],:] = reports[target3,:]
+                        target3 = int(ceil(first(rand(1))) * REPORTERS)
+                        reports[target3,:] = reports[liars[i],:]
                     end
                 end
             end
@@ -173,17 +173,17 @@ function generate_data(collusion::Real,
             # Pairs
             diceroll = first(rand(1))
             if diceroll < collusion
-                reports[liars[i],:] = reports[liars[i+1],:]
+                reports[liars[i+1],:] = reports[liars[i],:]
 
                 # Triples
                 if i + 2 < num_liars
                     if diceroll < collusion^2
-                        reports[liars[i],:] = reports[liars[i+2],:]
+                        reports[liars[i+2],:] = reports[liars[i],:]
         
                         # Quadruples
                         if i + 3 < num_liars
                             if diceroll < collusion^3
-                                reports[liars[i],:] = reports[liars[i+3],:]
+                                reports[liars[i+3],:] = reports[liars[i],:]
                             end
                         end
                     end
@@ -388,4 +388,7 @@ function jldload(fname::String)
 end
 
 # Auto load data from REPL
-~isinteractive() || (sim_data = jldload("data/sim_2015-02-20T03:28:48.jld"))
+# covariance example: sim_2015-02-17T23:38:23.jld
+# cokurtosis example: data/sim_2015-02-25T19:19:59.jld
+# latest: data/sim_2015-02-20T03:28:48.jld
+~isinteractive() || (sim_data = jldload("data/sim_2015-02-25T19:19:59.jld"))

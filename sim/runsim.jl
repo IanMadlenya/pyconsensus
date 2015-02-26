@@ -1,3 +1,5 @@
+using DataFrames
+
 include("simulate.jl")
 
 @pyimport pyconsensus

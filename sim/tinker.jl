@@ -30,6 +30,7 @@ r = normalize(ϱ)
 #   B .- mean(B,1) == centering(size(B,1)) * B
 X_event = B .- (B' * r)'
 Σ_event = X_event' * (X_event .* r) / (1 - sum(r.^2))
+# Σ_event = X_event' * diagm(r) * X_event / (1 - sum(r.^2))
 
 # Per-user covariance matrix
 # Notes:

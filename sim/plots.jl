@@ -1,3 +1,4 @@
+using DataFrames
 using Gadfly
 
 const num_algos = length(sim_data["algos"])
@@ -25,10 +26,6 @@ for algo in sim_data["algos"]
         sim_data[algo]["liars_bonus"][:,target],
         sim_data[algo]["correct"][:,target],
     ]
-    algos = [
-        algos,
-        repmat(fill!(Array(String, gridrows), algo), 3, 1)[:],
-    ]
     metrics = [
         metrics,
         fill!(Array(String, gridrows), "% beats"),
@@ -47,6 +44,19 @@ for algo in sim_data["algos"]
         sim_data[algo]["liars_bonus"][:,target] + sim_data[algo]["liars_bonus_std"][:,target],
         sim_data[algo]["correct"][:,target] + sim_data[algo]["correct_std"][:,target],
     ]
+    if algo == "first-component"
+        algo = "Sztorc"
+    elseif algo == "fourth-cumulant"
+        algo = "Cokurtosis"
+    elseif algo == "covariance-ratio"
+        algo = "Covariance"
+    elseif algo =="fixed-variance"
+        algo = "Fixed-variance"
+    end
+    algos = [
+        algos,
+        repmat(fill!(Array(String, gridrows), algo), 3, 1)[:],
+    ]
 end
 df = DataFrame(metric=metrics[:],
                liar_threshold=liar_threshold[:],
@@ -56,22 +66,20 @@ df = DataFrame(metric=metrics[:],
                algorithm=algos[:])
 
 # Plot metrics vs liar_threshold parameter
-set_default_plot_size(12inch, 7inch)
+# set_default_plot_size(15inch, 7inch)
 optstr = ""
 for flag in ("conspiracy", "allwrong", "indiscriminate")
-    optstr *= (sim_data[flag]) ? " $flag" : ""
+    optstr *= (sim_data[flag]) ? " " * uppercase(flag) : ""
 end
 infoblurb = string(
     sim_data["num_reporters"],
-    "x",
+    " users reporting on ",
     sim_data["num_events"],
-    " (",
+    " events (",
     sim_data["itermax"],
-    " iterations)",
-    " collude=",
+    " iterations @ γ = ",
     sim_data["collude"],
-    # " variance_threshold=",
-    # sim_data["variance_threshold"],
+    ")",
     optstr,
 )
 pl = plot(df,
@@ -94,4 +102,4 @@ pl = plot(df,
     ),
 )
 pl_file = "metrics_" * repr(now()) * ".svg"
-draw(SVG(pl_file, 12inch, 7inch), pl)
+draw(SVG(pl_file, 10inch, 12inch), pl)
