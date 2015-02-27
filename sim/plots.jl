@@ -44,11 +44,11 @@ for algo in sim_data["algos"]
         sim_data[algo]["liars_bonus"][:,target] + sim_data[algo]["liars_bonus_std"][:,target],
         sim_data[algo]["correct"][:,target] + sim_data[algo]["correct_std"][:,target],
     ]
-    if algo == "first-component"
+    if algo == "first-component" || algo == "sztorc"
         algo = "Sztorc"
-    elseif algo == "fourth-cumulant"
+    elseif algo == "fourth-cumulant" || algo == "cokurtosis"
         algo = "Cokurtosis"
-    elseif algo == "covariance-ratio"
+    elseif algo == "covariance-ratio" || algo == "covariance"
         algo = "Covariance"
     elseif algo =="fixed-variance"
         algo = "Fixed-variance"

@@ -8,12 +8,11 @@ using JointMoments
 # todo:
 #   - label pairs, triples, quadruples
 #   - mix conspiracy with regular collusion
-#   - use flattened + sparse cokurtosis tensor
 #   - scalar event resolution (check reward/vote slopes)
 
 const EVENTS = 25
-const REPORTERS = 40
-const ITERMAX = 100
+const REPORTERS = 50
+const ITERMAX = 10
 const SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best for fixed-variance,
@@ -26,8 +25,8 @@ const DISTORT = 0
 const RESPONSES = -1:1
 
 # Allowed initial reputation values
-const REP_RANGE = 1:5
-const REP_RAND = true
+const REP_RANGE = 1:25
+const REP_RAND = false
 
 # Collusion: 0.2 => 20% chance liar will copy another liar
 # (todo: make this % chance to copy any user, not just liars)
@@ -242,8 +241,15 @@ function simulate(liar_threshold::Real;
                         data[:reports]';
                         standardize=true,
                         bias=1,
-                        dense=true,
+                        # dense=false,
+                        # flatten=true,
                     )
+                    # tensor = coskew(
+                    #     data[:reports]';
+                    #     standardize=true,
+                    #     bias=1,
+                    #     dense=false,
+                    # )
                     contrib = sum(sum(sum(tensor, 4), 3), 2)[:]
                     data[:aux] = [ :cokurt => contrib / sum(contrib) ]
                 end
@@ -309,16 +315,15 @@ function sensitivity(liar_threshold_range::Range,
             end
         end
     end
+    num_trials = length(liar_threshold_range)
     @inbounds for (row, liar_threshold) in enumerate(liar_threshold_range)
-        println("liar_threshold: ", liar_threshold)
+        print("Trial ", string(row, "/", num_trials, " (", round(row/num_trials*100,2),"%)\r"))
 
         # Variance threshold parametrization
         if parametrize
             @inbounds for (col, variance_threshold) in enumerate(variance_threshold_range)
                 println("  variance_threshold: ", variance_threshold)
-                C = simulate(liar_threshold,
-                             variance_threshold=variance_threshold,
-                             collusion=COLLUDE)
+                C = simulate(liar_threshold, variance_threshold=variance_threshold)
                 @inbounds for algo in ALGOS
                     for s in STATISTICS
                         for m in METRICS
@@ -328,7 +333,7 @@ function sensitivity(liar_threshold_range::Range,
                 end
             end
         else
-            C = simulate(liar_threshold, collusion=COLLUDE)
+            C = simulate(liar_threshold)
             res["iterate"] = C["iterate"]
             @inbounds for algo in ALGOS
                 for s in STATISTICS
@@ -339,6 +344,7 @@ function sensitivity(liar_threshold_range::Range,
             end
         end
     end
+    println("")
 
     # Save data to file
     variance_thresholds = (isa(variance_threshold_range, Range)) ?
