@@ -164,7 +164,7 @@ class Oracle(object):
 
         """
         convergence = False
-        net_adj_prin_comp = None
+        nonconformity = None
 
         # Compute the weighted mean (of all reporters) for each event
         weighted_mean = np.ma.average(reports_filled,
@@ -186,19 +186,10 @@ class Oracle(object):
         first_score = np.dot(mean_deviation, first_loading)
 
         if self.algorithm == "sztorc":
-
-            set1 = first_score + np.abs(np.min(first_score))
-            set2 = first_score - np.max(first_score)
-            old = np.dot(self.reputation.T, reports_filled)
-            new1 = np.dot(self.normalize(set1), reports_filled)
-            new2 = np.dot(self.normalize(set2), reports_filled)
-            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-            adj_prin_comp = set1 if ref_ind <= 0 else set2
-            net_adj_prin_comp = adj_prin_comp
+            nonconformity = self.rbcr(first_score, reports_filled)
             convergence = True
 
         elif self.algorithm == "fixed-var-length":
-
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
             length = 0
@@ -211,19 +202,10 @@ class Oracle(object):
                 print i, "components"
             self.num_components = i
             length = np.sqrt(length)
-            set1 = length + np.abs(np.min(length))
-            set2 = length - np.max(length)
-            old = np.dot(self.reputation.T, reports_filled)
-            new1 = np.dot(self.normalize(set1), reports_filled)
-            new2 = np.dot(self.normalize(set2), reports_filled)
-            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-            net_adj_prin_comp = set1 if ref_ind <= 0 else set2
-            # net_adj_prin_comp = 1 / np.abs(length)
-            # net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+            nonconformity = self.rbcr(length, reports_filled)
             convergence = True
 
         elif self.algorithm == "fixed-variance":
-
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
             for i, var_exp in enumerate(variance_explained):
@@ -237,32 +219,22 @@ class Oracle(object):
             if self.verbose:
                 print i, "components"
             self.num_components = i
-            set1 = net_score + np.abs(np.min(net_score))
-            set2 = net_score - np.max(net_score)
-            old = np.dot(self.reputation.T, reports_filled)
-            new1 = np.dot(self.normalize(set1), reports_filled)
-            new2 = np.dot(self.normalize(set2), reports_filled)
-            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-            net_adj_prin_comp = set1 if ref_ind <= 0 else set2
+            nonconformity = self.rbcr(net_score, reports_filled)
             convergence = True            
 
         elif self.algorithm == "inverse-scores":
-
-            # principal_components = PCA().fit_transform(covariance_matrix)
             principal_components = np.linalg.svd(covariance_matrix)[0]
             first_loading = principal_components[:,0]
             first_loading = np.ma.masked_array(first_loading / np.sqrt(np.sum(first_loading**2)))
             first_score = np.dot(mean_deviation, first_loading)
 
             # Normalized absolute inverse scores
-            net_adj_prin_comp = 1 / np.abs(first_score)
-            net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+            nonconformity = 1 / np.abs(first_score)
+            nonconformity /= np.sum(nonconformity)
             convergence = True
 
         elif self.algorithm == "ica-adjusted":
             ica = FastICA(n_components=self.num_events, whiten=False)
-                          # random_state=0,
-                          # max_iter=1000)
             while not convergence:
                 with warnings.catch_warnings(record=True) as w:
                     try:
@@ -276,18 +248,8 @@ class Oracle(object):
                             S_first_loading = S_[:,0]
                             S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
                             S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).ravel()
-
-                            S_set1 = S_first_score + np.abs(np.min(S_first_score))
-                            S_set2 = S_first_score - np.max(S_first_score)
-                            S_old = np.dot(self.reputation.T, reports_filled)
-                            S_new1 = np.dot(self.normalize(S_set1), reports_filled)
-                            S_new2 = np.dot(self.normalize(S_set2), reports_filled)
-                            S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
-                            S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
-                            if self.verbose:
-                                print self.normalize(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
-                            net_adj_prin_comp = S_adj_prin_comp
-                            convergence = not any(np.isnan(net_adj_prin_comp))
+                            nonconformity = self.rbcr(S_first_score, reports_filled)
+                            convergence = not any(np.isnan(nonconformity))
                     except:
                         continue
 
@@ -306,18 +268,8 @@ class Oracle(object):
                             S_first_loading = S_[:,0]
                             S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
                             S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).ravel()
-
-                            S_set1 = S_first_score + np.abs(np.min(S_first_score))
-                            S_set2 = S_first_score - np.max(S_first_score)
-                            S_old = np.dot(self.reputation.T, reports_filled)
-                            S_new1 = np.dot(self.normalize(S_set1), reports_filled)
-                            S_new2 = np.dot(self.normalize(S_set2), reports_filled)
-                            S_ref_ind = np.sum((S_new1 - S_old)**2) - np.sum((S_new2 - S_old)**2)
-                            S_adj_prin_comp = S_set1 if S_ref_ind <= 0 else S_set2
-                            if self.verbose:
-                                print self.normalize(S_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
-                            net_adj_prin_comp = S_adj_prin_comp
-                            convergence = not any(np.isnan(net_adj_prin_comp))
+                            nonconformity = self.rbcr(S_first_score, reports_filled)
+                            convergence = not any(np.isnan(nonconformity))
                     except:
                         continue
 
@@ -335,10 +287,10 @@ class Oracle(object):
                             S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).ravel()
 
                             # Normalized absolute inverse scores
-                            net_adj_prin_comp = 1 / np.abs(S_first_score)
-                            net_adj_prin_comp /= np.sum(net_adj_prin_comp)
+                            nonconformity = 1 / np.abs(S_first_score)
+                            nonconformity /= np.sum(nonconformity)
 
-                            convergence = not any(np.isnan(net_adj_prin_comp))
+                            convergence = not any(np.isnan(nonconformity))
                     except:
                         continue
 
@@ -358,14 +310,7 @@ class Oracle(object):
             contrib = np.sum(covmat, 1)
             relative_contrib = contrib / np.sum(contrib)
 
-            set1 = relative_contrib + np.abs(np.min(relative_contrib))
-            set2 = relative_contrib - np.max(relative_contrib)
-            old = np.dot(self.reputation.T, reports_filled)
-            new1 = np.dot(self.normalize(set1), reports_filled)
-            new2 = np.dot(self.normalize(set2), reports_filled)
-            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-            net_adj_prin_comp = set1 if ref_ind <= 0 else set2
-
+            nonconformity = self.rbcr(relative_contrib, reports_filled)
             convergence = True
 
         elif self.algorithm == "covariance-unweighted":
@@ -380,14 +325,7 @@ class Oracle(object):
             contrib = np.sum(covmat, 1)
             relative_contrib = contrib / np.sum(contrib)
 
-            set1 = relative_contrib + np.abs(np.min(relative_contrib))
-            set2 = relative_contrib - np.max(relative_contrib)
-            old = np.dot(self.reputation.T, reports_filled)
-            new1 = np.dot(self.normalize(set1), reports_filled)
-            new2 = np.dot(self.normalize(set2), reports_filled)
-            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-            net_adj_prin_comp = set1 if ref_ind <= 0 else set2
-
+            nonconformity = self.rbcr(relative_contrib, reports_filled)
             convergence = True
 
         # Brute force scoring: replicated rows
@@ -415,48 +353,45 @@ class Oracle(object):
                 # relative_contrib[i] = contrib_rpl[row] # this gives the same result as "covariance"
                 row += self.reptokens[i]
             relative_contrib /= np.sum(relative_contrib)
-
-            # import ipdb; ipdb.set_trace()
-
-            set1 = relative_contrib + np.abs(np.min(relative_contrib))
-            set2 = relative_contrib - np.max(relative_contrib)
-            old = np.dot(self.reputation.T, reports_filled)
-            new1 = np.dot(self.normalize(set1), reports_filled)
-            new2 = np.dot(self.normalize(set2), reports_filled)
-            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-            net_adj_prin_comp = set1 if ref_ind <= 0 else set2
-
+            nonconformity = self.rbcr(relative_contrib, reports_filled)
             convergence = True            
 
         # Sum over all events in the ballot; the ratio of this sum to
         # the total cokurtosis is that reporter's contribution.
         elif self.algorithm == "cokurtosis":
             if self.aux is not None and "cokurt" in self.aux:
-                cokurt_contrib = self.aux["cokurt"]
-                # contrib = np.sum(np.sum(np.sum(cokurt, axis=0), axis=0), axis=0)
-                # relative_contrib = cokurt_contrib / np.sum(cokurt_contrib)
-                set1 = cokurt_contrib + np.abs(np.min(cokurt_contrib))
-                set2 = cokurt_contrib - np.max(cokurt_contrib)
-                old = np.dot(self.reputation.T, reports_filled)
-                new1 = np.dot(self.normalize(set1), reports_filled)
-                new2 = np.dot(self.normalize(set2), reports_filled)
-                ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
-                net_adj_prin_comp = set1 if ref_ind <= 0 else set2
+                nonconformity = self.rbcr(self.aux["cokurt"], reports_filled)
                 convergence = True
 
-        row_reward_weighted = self.reputation
-        if max(abs(net_adj_prin_comp)) != 0:
-            row_reward_weighted = self.normalize(net_adj_prin_comp * (self.reputation / np.mean(self.reputation)).T)
+        # Sum over all events in the ballot; the ratio of this sum to
+        # the total coskewness is that reporter's contribution.
+        elif self.algorithm == "coskewness":
+            if self.aux is not None and "coskew" in self.aux:
+                nonconformity = self.rbcr(self.aux["coskew"], reports_filled)
+                convergence = True
 
-        smooth_rep = self.alpha*row_reward_weighted + (1-self.alpha)*self.reputation.T
+        # Reward/punish according to nonconformity scores
+        this_rep = np.copy(self.reputation)
+        if max(abs(nonconformity)) != 0:
+            this_rep = self.normalize(nonconformity * (self.reputation / np.mean(self.reputation)).T)
+        smooth_rep = self.alpha*this_rep + (1-self.alpha)*self.reputation.T
 
         return {
             "first_loading": first_loading,
             "old_rep": self.reputation.T,
-            "this_rep": row_reward_weighted,
+            "this_rep": this_rep,
             "smooth_rep": smooth_rep,
             "convergence": convergence,
         }
+
+    def rbcr(self, scores, reports):
+        set1 = scores + np.abs(np.min(scores))
+        set2 = scores - np.max(scores)
+        old = np.dot(self.reputation.T, reports)
+        new1 = np.dot(self.normalize(set1), reports)
+        new2 = np.dot(self.normalize(set2), reports)
+        ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+        return set1 if ref_ind <= 0 else set2
 
     def consensus(self):
 

@@ -9,15 +9,18 @@ using JointMoments
 #   - label pairs, triples, quadruples
 #   - mix conspiracy with regular collusion
 #   - scalar event resolution (check reward/vote slopes)
+#   - combined cokurtosis + fixed-variance methods
+#   - use coskew somehow (?)
+#   - time-evolution of scalar statistics
 
-const EVENTS = 50
-const REPORTERS = 100
-const ITERMAX = 250
+const EVENTS = 30
+const REPORTERS = 60
+const ITERMAX = 10
 const SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best for fixed-variance,
 # 75% for fixed-var-length
-const VARIANCE = 0.9
+const VARIANCE = 0.25
 const DISTORT = 0
 
 # Range of possible responses
@@ -39,7 +42,9 @@ const ALGOS = [
     "sztorc",
     "fixed-variance",
     "covariance",
+    "coskewness",
     "cokurtosis",
+    # "FVT+cokurtosis",
 ]
 const METRICS = [
     "beats",
@@ -233,7 +238,21 @@ function simulate(liar_threshold::Real;
             A[algo] = { "convergence" => false }
             metrics = Dict()
             while ~A[algo]["convergence"]
-                if algo == "cokurtosis"
+                if algo == "coskewness"
+
+                    # Flattened coskewness tensor
+                    tensor = coskew(
+                        data[:reports]';
+                        standardize=true,
+                        bias=1,
+                        flatten=true,
+                    )
+
+                    # Per-user coskewness contribution: sum across columns
+                    contrib = sum(tensor, 2)[:]
+                    data[:aux] = [ :coskew => contrib / sum(contrib) ]
+                end
+                if algo == "cokurtosis" || algo == "FVT+cokurtosis"
 
                     # Flattened cokurtosis tensor
                     tensor = cokurt(
@@ -313,7 +332,9 @@ function sensitivity(liar_threshold_range::Range,
     end
     num_trials = length(liar_threshold_range)
     @inbounds for (row, liar_threshold) in enumerate(liar_threshold_range)
-        print("Trial ", string(row, "/", num_trials, " (", round(row/num_trials*100,2),"%)\r"))
+        percent_complete = round(row / num_trials * 100, 2)
+        print("Trial ",
+              string(row, "/", num_trials, " (", percent_complete,"%)\r"))
 
         # Variance threshold parametrization
         if parametrize
