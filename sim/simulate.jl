@@ -42,9 +42,9 @@ const ALGOS = [
     "sztorc",
     "fixed-variance",
     "covariance",
-    "coskewness",
+    # "coskewness",
     "cokurtosis",
-    # "FVT+cokurtosis",
+    "FVT+cokurtosis",
 ]
 const METRICS = [
     "beats",
@@ -240,23 +240,8 @@ function simulate(liar_threshold::Real;
             while ~A[algo]["convergence"]
                 if algo == "coskewness"
 
-                    # # Flattened coskewness tensor
-                    # tensor = coskew(
-                    #     data[:reports]';
-                    #     standardize=true,
-                    #     bias=1,
-                    #     flatten=true,
-                    # )
-
-                    # Per-user coskewness contribution: sum across columns
-                    # contrib = sum(tensor, 2)[:]
-
-                    # Coskewness cube
-                    tensor = coskew(
-                        data[:reports]';
-                        standardize=true,
-                        bias=1,
-                    )
+                    # Coskewness tensor (cube)
+                    tensor = coskew(data[:reports]'; standardize=true, bias=1)
 
                     # Per-user coskewness contribution
                     contrib = sum(sum(tensor, 3), 2)[:]
@@ -264,23 +249,8 @@ function simulate(liar_threshold::Real;
                 end
                 if algo == "cokurtosis" || algo == "FVT+cokurtosis"
 
-                    # # Flattened cokurtosis tensor
-                    # tensor = cokurt(
-                    #     data[:reports]';
-                    #     standardize=true,
-                    #     bias=1,
-                    #     flatten=true,
-                    # )
-
-                    # Per-user cokurtosis contribution: sum across columns
-                    # contrib = sum(tensor, 2)[:]
-
-                    # Cokurtosis tesseract
-                    tensor = cokurt(
-                        data[:reports]';
-                        standardize=true,
-                        bias=1,
-                    )
+                    # Cokurtosis tensor (tesseract)
+                    tensor = cokurt(data[:reports]'; standardize=true, bias=1)
 
                     # Per-user cokurtosis contribution
                     contrib = sum(sum(sum(tensor, 4), 3), 2)[:]

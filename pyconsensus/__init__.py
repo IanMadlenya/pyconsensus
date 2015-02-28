@@ -44,7 +44,7 @@ from weightedstats import weighted_median
 from six.moves import xrange as range
 
 __title__      = "pyconsensus"
-__version__    = "0.4.1"
+__version__    = "0.5"
 __author__     = "Paul Sztorc and Jack Peterson"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
@@ -59,8 +59,8 @@ np.set_printoptions(linewidth=225,
 class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
-                 catch_tolerance=0.1, alpha=0.1, verbose=False, aux=None,
-                 algorithm="sztorc", variance_threshold=0.9):
+                 catch_tolerance=0.1, alpha=0.1, beta=0.5, verbose=False,
+                 aux=None, algorithm="fixed-variance", variance_threshold=0.9):
         """
         Args:
           reports (list-of-lists): reports matrix; rows = reporters, columns = Events.
@@ -77,11 +77,13 @@ class Oracle(object):
         self.num_events = len(reports[0])
         self.event_bounds = event_bounds
         self.catch_tolerance = catch_tolerance
-        self.alpha = alpha
+        self.alpha = alpha  # reputation smoothing parameter
+        self.beta = beta    # variance weight (for mixed algorithms)
         self.verbose = verbose
         self.algorithm = algorithm
         self.variance_threshold = variance_threshold
         self.num_components = -1
+        self.convergence = False
         self.aux = aux
         if reputation is None:
             self.weighted = False
@@ -163,8 +165,7 @@ class Oracle(object):
         The reports matrix has reporters as rows and events as columns.
 
         """
-        convergence = False
-        nonconformity = None
+        nc = None
 
         # Compute the weighted mean (of all reporters) for each event
         weighted_mean = np.ma.average(reports_filled,
@@ -186,8 +187,7 @@ class Oracle(object):
         first_score = np.dot(mean_deviation, first_loading)
 
         if self.algorithm == "sztorc":
-            nonconformity = self.rbcr(first_score, reports_filled)
-            convergence = True
+            nc = self.nonconformity(first_score, reports_filled)
 
         elif self.algorithm == "fixed-var-length":
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
@@ -198,13 +198,11 @@ class Oracle(object):
                 score = Sigma[i] * np.dot(mean_deviation, loading)
                 length += score**2
                 if var_exp > self.variance_threshold: break
-            if self.verbose:
-                print i, "components"
             self.num_components = i
             length = np.sqrt(length)
-            nonconformity = self.rbcr(length, reports_filled)
-            convergence = True
+            nc = self.nonconformity(length, reports_filled)
 
+        # Fixed-variance threshold: eigenvalue-weighted sum of score vectors
         elif self.algorithm == "fixed-variance":
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
@@ -216,22 +214,17 @@ class Oracle(object):
                 else:
                     net_score += Sigma[i] * score
                 if var_exp > self.variance_threshold: break
-            if self.verbose:
-                print i, "components"
             self.num_components = i
-            nonconformity = self.rbcr(net_score, reports_filled)
-            convergence = True            
+            nc = self.nonconformity(net_score, reports_filled)            
 
+        # Sztorc algorithm with normalized absolute inverse scores
         elif self.algorithm == "inverse-scores":
             principal_components = np.linalg.svd(covariance_matrix)[0]
             first_loading = principal_components[:,0]
             first_loading = np.ma.masked_array(first_loading / np.sqrt(np.sum(first_loading**2)))
             first_score = np.dot(mean_deviation, first_loading)
-
-            # Normalized absolute inverse scores
-            nonconformity = 1 / np.abs(first_score)
-            nonconformity /= np.sum(nonconformity)
-            convergence = True
+            nc = 1 / np.abs(first_score)
+            nc /= np.sum(nc)
 
         elif self.algorithm == "ica-adjusted":
             ica = FastICA(n_components=self.num_events, whiten=False)
@@ -242,14 +235,11 @@ class Oracle(object):
                         if len(w):
                             continue
                         else:
-                            if self.verbose:
-                                print "ICA loadings:"
-                                print S_
-                            S_first_loading = S_[:,0]
-                            S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
-                            S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).ravel()
-                            nonconformity = self.rbcr(S_first_score, reports_filled)
-                            convergence = not any(np.isnan(nonconformity))
+                            first_loading = S_[:,0]
+                            first_loading /= np.sqrt(np.sum(first_loading**2))
+                            first_score = np.array(np.dot(mean_deviation, first_loading)).ravel()
+                            nc = self.nonconformity(first_score, reports_filled)
+                            self.convergence = not any(np.isnan(nc))
                     except:
                         continue
 
@@ -262,14 +252,11 @@ class Oracle(object):
                         if len(w):
                             continue
                         else:
-                            if self.verbose:
-                                print "ICA loadings:"
-                                print S_
-                            S_first_loading = S_[:,0]
-                            S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
-                            S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).ravel()
-                            nonconformity = self.rbcr(S_first_score, reports_filled)
-                            convergence = not any(np.isnan(nonconformity))
+                            first_loading = S_[:,0]
+                            first_loading /= np.sqrt(np.sum(first_loading**2))
+                            first_score = np.array(np.dot(mean_deviation, first_loading)).ravel()
+                            nc = self.nonconformity(first_score, reports_filled)
+                            self.convergence = not any(np.isnan(nc))
                     except:
                         continue
 
@@ -282,15 +269,12 @@ class Oracle(object):
                         if len(w):
                             continue
                         else:
-                            S_first_loading = S_[:,0]
-                            S_first_loading /= np.sqrt(np.sum(S_first_loading**2))
-                            S_first_score = np.array(np.dot(mean_deviation, S_first_loading)).ravel()
-
-                            # Normalized absolute inverse scores
-                            nonconformity = 1 / np.abs(S_first_score)
-                            nonconformity /= np.sum(nonconformity)
-
-                            convergence = not any(np.isnan(nonconformity))
+                            first_loading = S_[:,0]
+                            first_loading /= np.sqrt(np.sum(first_loading**2))
+                            first_score = np.array(np.dot(mean_deviation, first_loading)).ravel()
+                            nc = 1 / np.abs(first_score)
+                            nc /= np.sum(nc)
+                            self.convergence = not any(np.isnan(nc))
                     except:
                         continue
 
@@ -301,32 +285,26 @@ class Oracle(object):
             row_mean = np.mean(reports_filled, axis=1)
             centered = np.zeros(reports_filled.shape)
             onesvect = np.ones(self.num_events)
-            for i in range(self.num_reporters): centered[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
-
+            for i in range(self.num_reporters):
+                centered[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
             # Unweighted: np.dot(centered, centered.T) / self.num_events
             covmat = np.dot(centered, np.ma.multiply(centered.T, self.reputation)) / float(1 - np.sum(self.reputation**2))
-
             # Sum across columns of the (other) covariance matrix
             contrib = np.sum(covmat, 1)
             relative_contrib = contrib / np.sum(contrib)
-
-            nonconformity = self.rbcr(relative_contrib, reports_filled)
-            convergence = True
+            nc = self.nonconformity(relative_contrib, reports_filled)
 
         elif self.algorithm == "covariance-unweighted":
             row_mean = np.mean(reports_filled, axis=1)
             centered = np.zeros(reports_filled.shape)
             onesvect = np.ones(self.num_events)
-            for i in range(self.num_reporters): centered[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
-
+            for i in range(self.num_reporters):
+                centered[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
             covmat = np.dot(centered, centered.T) / self.num_events
-
             # Sum across columns of the (other) covariance matrix
             contrib = np.sum(covmat, 1)
             relative_contrib = contrib / np.sum(contrib)
-
-            nonconformity = self.rbcr(relative_contrib, reports_filled)
-            convergence = True
+            nc = self.nonconformity(relative_contrib, reports_filled)
 
         # Brute force scoring: replicated rows
         elif self.algorithm == "covariance-replicate":
@@ -342,7 +320,6 @@ class Oracle(object):
             for i in range(num_rows):
                 centered[i,:] = B[i,:] - onesvect * row_mean[i]
             covmat = np.dot(centered, centered.T) / self.num_events
-
             # Sum across columns of the (other) covariance matrix
             contrib_rpl = np.sum(covmat, 1)
             # relative_contrib_rpl = contrib_rpl / np.sum(contrib_rpl)
@@ -350,47 +327,61 @@ class Oracle(object):
             row = 0
             for i in range(self.num_reporters):
                 relative_contrib[i] = self.reptokens[i] * contrib_rpl[row]
-                # relative_contrib[i] = contrib_rpl[row] # this gives the same result as "covariance"
+                # relative_contrib[i] = contrib_rpl[row] # same result as "covariance"
                 row += self.reptokens[i]
             relative_contrib /= np.sum(relative_contrib)
-            nonconformity = self.rbcr(relative_contrib, reports_filled)
-            convergence = True            
-
-        # Sum over all events in the ballot; the ratio of this sum to
-        # the total cokurtosis is that reporter's contribution.
-        elif self.algorithm == "cokurtosis":
-            if self.aux is not None and "cokurt" in self.aux:
-                nonconformity = self.rbcr(self.aux["cokurt"], reports_filled)
-                convergence = True
+            nc = self.nonconformity(relative_contrib, reports_filled)            
 
         # Sum over all events in the ballot; the ratio of this sum to
         # the total coskewness is that reporter's contribution.
         elif self.algorithm == "coskewness":
             if self.aux is not None and "coskew" in self.aux:
-                nonconformity = self.rbcr(self.aux["coskew"], reports_filled)
-                convergence = True
+                nc = self.nonconformity(self.aux["coskew"], reports_filled)
 
-        # Reward/punish according to nonconformity scores
-        this_rep = np.copy(self.reputation)
-        if max(abs(nonconformity)) != 0:
-            this_rep = self.normalize(nonconformity * (self.reputation / np.mean(self.reputation)).T)
-        smooth_rep = self.alpha*this_rep + (1-self.alpha)*self.reputation.T
+        # Sum over all events in the ballot; the ratio of this sum to
+        # the total cokurtosis is that reporter's contribution.
+        elif self.algorithm == "cokurtosis":
+            if self.aux is not None and "cokurt" in self.aux:
+                nc = self.nonconformity(self.aux["cokurt"], reports_filled)
 
+        # Fixed-variance threshold: eigenvalue-weighted sum of score vectors
+        elif self.algorithm == "FVT+cokurtosis":
+            U, Sigma, Vt = np.linalg.svd(covariance_matrix)
+            variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
+            for i, var_exp in enumerate(variance_explained):
+                loading = U.T[i]
+                score = np.dot(mean_deviation, loading)
+                if i == 0:
+                    net_score = Sigma[i] * score
+                else:
+                    net_score += Sigma[i] * score
+                if var_exp > self.variance_threshold: break
+            self.num_components = i
+            nc_FVT = self.nonconformity(net_score, reports_filled)
+            if self.aux is not None and "cokurt" in self.aux:
+                nc_cokurt = self.nonconformity(self.aux["cokurt"], reports_filled)
+                nc = self.beta*nc_FVT + (1 - self.beta)*nc_cokurt
+
+        # Use adjusted nonconformity scores to update Reputation fractions
+        this_rep = self.normalize(
+            nc * (self.reputation / np.mean(self.reputation)).T
+        )
         return {
             "first_loading": first_loading,
             "old_rep": self.reputation.T,
             "this_rep": this_rep,
-            "smooth_rep": smooth_rep,
-            "convergence": convergence,
+            "smooth_rep": self.alpha*this_rep + (1-self.alpha)*self.reputation.T,
         }
 
-    def rbcr(self, scores, reports):
+    def nonconformity(self, scores, reports):
+        """Adjusted nonconformity scores for Reputation redistribution"""
         set1 = scores + np.abs(np.min(scores))
         set2 = scores - np.max(scores)
         old = np.dot(self.reputation.T, reports)
         new1 = np.dot(self.normalize(set1), reports)
         new2 = np.dot(self.normalize(set2), reports)
         ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+        self.convergence = True
         return set1 if ref_ind <= 0 else set2
 
     def consensus(self):
@@ -401,21 +392,20 @@ class Oracle(object):
         # Consensus - Row Players
         # New Consensus Reward
         player_info = self.weighted_pca(reports_filled)
-        adj_first_loadings = player_info['first_loading']
 
         # Column Players (The Event Creators)
-        # Calculation of Reward for Event Authors
-        # Consensus - "Who won?" Event Outcome    
-        # Simple matrix multiplication ... highest information density at reporter_bonus,
-        # but need EventOutcomes.Raw to get to that
         outcomes_raw = np.dot(player_info['smooth_rep'], reports_filled).squeeze()
 
         # Discriminate Based on Contract Type
         if self.event_bounds is not None:
             for i in range(reports_filled.shape[1]):
+
                 # Our Current best-guess for this Scaled Event (weighted median)
                 if self.event_bounds[i]["scaled"]:
-                    outcomes_raw[i] = weighted_median(reports_filled[:,i].data, weights=player_info["smooth_rep"].ravel().data)
+                    outcomes_raw[i] = weighted_median(
+                        reports_filled[:,i].data,
+                        weights=player_info["smooth_rep"].ravel().data,
+                    )
 
         # The Outcome (Discriminate Based on Contract Type)
         outcomes_adj = []
@@ -440,8 +430,7 @@ class Oracle(object):
         consensus_reward = self.normalize(certainty)
         avg_certainty = np.mean(certainty)
 
-        # Participation
-        # Information about missing values
+        # Participation: information about missing values
         na_mat = self.reports * 0
         na_mat[na_mat.mask] = 1  # indicator matrix for missing
 
@@ -450,8 +439,7 @@ class Oracle(object):
         participation_columns = 1 - np.dot(player_info['smooth_rep'], na_mat)
 
         # Participation Within Agents (Rows)
-        # Many options
-        # 1- Democracy Option - all Events treated equally.
+        # Democracy Option - all Events treated equally.
         participation_rows = 1 - na_mat.sum(axis=1) / na_mat.shape[1]
 
         # General Participation
@@ -487,7 +475,7 @@ class Oracle(object):
                 'reporter_bonus': reporter_bonus.data.tolist(),
                 },
             'events': {
-                'adj_first_loadings': adj_first_loadings.data.tolist(),
+                'adj_first_loadings': player_info['first_loading'].data.tolist(),
                 'outcomes_raw': outcomes_raw.data.tolist(),
                 'consensus_reward': consensus_reward,
                 'certainty': certainty,
@@ -499,7 +487,7 @@ class Oracle(object):
                 },
             'participation': 1 - percent_na,
             'avg_certainty': avg_certainty,
-            'convergence': player_info['convergence'],
+            'convergence': self.convergence,
             'components': self.num_components,
         }
 
