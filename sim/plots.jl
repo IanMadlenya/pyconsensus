@@ -50,8 +50,12 @@ for algo in sim_data["algos"]
         algo = "Cokurtosis"
     elseif algo == "covariance-ratio" || algo == "covariance"
         algo = "Covariance"
-    elseif algo =="fixed-variance"
+    elseif algo == "fixed-variance"
         algo = "Fixed-variance"
+    elseif algo == "coskewness"
+        algo = "Coskewness"
+    elseif algo == "FVT+cokurtosis"
+        algo = "FVT + Cokurtosis"
     end
     algos = [
         algos,

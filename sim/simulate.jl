@@ -240,30 +240,50 @@ function simulate(liar_threshold::Real;
             while ~A[algo]["convergence"]
                 if algo == "coskewness"
 
-                    # Flattened coskewness tensor
+                    # # Flattened coskewness tensor
+                    # tensor = coskew(
+                    #     data[:reports]';
+                    #     standardize=true,
+                    #     bias=1,
+                    #     flatten=true,
+                    # )
+
+                    # Per-user coskewness contribution: sum across columns
+                    # contrib = sum(tensor, 2)[:]
+
+                    # Coskewness cube
                     tensor = coskew(
                         data[:reports]';
                         standardize=true,
                         bias=1,
-                        flatten=true,
                     )
 
-                    # Per-user coskewness contribution: sum across columns
-                    contrib = sum(tensor, 2)[:]
+                    # Per-user coskewness contribution
+                    contrib = sum(sum(tensor, 3), 2)[:]
                     data[:aux] = [ :coskew => contrib / sum(contrib) ]
                 end
                 if algo == "cokurtosis" || algo == "FVT+cokurtosis"
 
-                    # Flattened cokurtosis tensor
+                    # # Flattened cokurtosis tensor
+                    # tensor = cokurt(
+                    #     data[:reports]';
+                    #     standardize=true,
+                    #     bias=1,
+                    #     flatten=true,
+                    # )
+
+                    # Per-user cokurtosis contribution: sum across columns
+                    # contrib = sum(tensor, 2)[:]
+
+                    # Cokurtosis tesseract
                     tensor = cokurt(
                         data[:reports]';
                         standardize=true,
                         bias=1,
-                        flatten=true,
                     )
 
-                    # Per-user cokurtosis contribution: sum across columns
-                    contrib = sum(tensor, 2)[:]
+                    # Per-user cokurtosis contribution
+                    contrib = sum(sum(sum(tensor, 4), 3), 2)[:]
                     data[:aux] = [ :cokurt => contrib / sum(contrib) ]
                 end
 
