@@ -10,9 +10,9 @@ using JointMoments
 #   - mix conspiracy with regular collusion
 #   - scalar event resolution (check reward/vote slopes)
 
-const EVENTS = 25
-const REPORTERS = 50
-const ITERMAX = 10
+const EVENTS = 50
+const REPORTERS = 100
+const ITERMAX = 250
 const SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best for fixed-variance,
@@ -228,31 +228,27 @@ function simulate(liar_threshold::Real;
             liar_threshold,
             variance_threshold=variance_threshold,
         )
-
-        # Use pyconsensus to find consensus
         A = Dict()
         @inbounds for algo in ALGOS
             A[algo] = { "convergence" => false }
             metrics = Dict()
             while ~A[algo]["convergence"]
                 if algo == "cokurtosis"
-                    # Cokurtosis tensor
+
+                    # Flattened cokurtosis tensor
                     tensor = cokurt(
                         data[:reports]';
                         standardize=true,
                         bias=1,
-                        # dense=false,
-                        # flatten=true,
+                        flatten=true,
                     )
-                    # tensor = coskew(
-                    #     data[:reports]';
-                    #     standardize=true,
-                    #     bias=1,
-                    #     dense=false,
-                    # )
-                    contrib = sum(sum(sum(tensor, 4), 3), 2)[:]
+
+                    # Per-user cokurtosis contribution: sum across columns
+                    contrib = sum(tensor, 2)[:]
                     data[:aux] = [ :cokurt => contrib / sum(contrib) ]
                 end
+
+                # Use pyconsensus for event resolution
                 A[algo] = pyconsensus.Oracle(
                     reports=data[:reports],
                     reputation=data[:reputation],
@@ -378,9 +374,11 @@ function sensitivity(liar_threshold_range::Range,
             "components_std" => res[algo]["stderr"]["components"],
         ]
     end
-    jldopen("data/sim_" * repr(now()) * ".jld", "w") do file
+    filename = "data/sim_" * repr(now()) * ".jld"
+    jldopen(filename, "w") do file
         write(file, "sim_data", sim_data)
     end
+    println("Data saved to ", filename)
     return sim_data
 end
 
@@ -396,5 +394,4 @@ end
 # Auto load data from REPL
 # covariance example: sim_2015-02-17T23:38:23.jld
 # cokurtosis example: data/sim_2015-02-25T19:19:59.jld
-# latest: data/sim_2015-02-20T03:28:48.jld
-~isinteractive() || (sim_data = jldload("data/sim_2015-02-25T19:19:59.jld"))
+~isinteractive() || (sim_data = jldload("data/sim_2015-02-26T22:33:41.jld"))

@@ -66,7 +66,6 @@ df = DataFrame(metric=metrics[:],
                algorithm=algos[:])
 
 # Plot metrics vs liar_threshold parameter
-# set_default_plot_size(15inch, 7inch)
 optstr = ""
 for flag in ("conspiracy", "allwrong", "indiscriminate")
     optstr *= (sim_data[flag]) ? " " * uppercase(flag) : ""
@@ -103,3 +102,4 @@ pl = plot(df,
 )
 pl_file = "metrics_" * repr(now()) * ".svg"
 draw(SVG(pl_file, 10inch, 12inch), pl)
+println("Plot saved to ", pl_file)
