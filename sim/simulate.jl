@@ -9,13 +9,14 @@ using JointMoments
 #   - label pairs, triples, quadruples
 #   - mix conspiracy with regular collusion
 #   - scalar event resolution (check reward/vote slopes)
-#   - combined cokurtosis + fixed-variance methods
-#   - use coskew somehow (?)
+#   - sensitivity analysis for FVT+cokurtosis parameter beta
 #   - time-evolution of scalar statistics
+#   - parallelize code
+#   - port "winning" algo to Serpent
 
 const EVENTS = 30
 const REPORTERS = 60
-const ITERMAX = 10
+const ITERMAX = 50
 const SQRTN = sqrt(ITERMAX)
 
 # Empirically, 90% variance threshold seems best for fixed-variance,
@@ -41,8 +42,6 @@ const ALLWRONG = false
 const ALGOS = [
     "sztorc",
     "fixed-variance",
-    "covariance",
-    # "coskewness",
     "cokurtosis",
     "FVT+cokurtosis",
 ]
@@ -285,16 +284,19 @@ function simulate(liar_threshold::Real;
         i += 1
     end
 
-    C = { "iterate" => iterate }
+    C = (String => Any)[
+        "iterate" => iterate,
+        "liar_threshold" => liar_threshold,
+    ]
     @inbounds for algo in ALGOS
-        C[algo] = [
-            "mean" => [
+        C[algo] = (String => Dict{String,Float64})[
+            "mean" => (String => Float64)[
                 "liars_bonus" => mean(B[algo]["liars_bonus"]),
                 "beats" => mean(B[algo]["beats"]),
                 "correct" => mean(B[algo]["correct"]),
                 "components" => mean(B[algo]["components"]),
             ],
-            "stderr" => [
+            "stderr" => (String => Float64)[
                 "liars_bonus" => std(B[algo]["liars_bonus"]) / SQRTN,
                 "beats" => std(B[algo]["beats"]) / SQRTN,
                 "correct" => std(B[algo]["correct"]) / SQRTN,
@@ -305,97 +307,6 @@ function simulate(liar_threshold::Real;
     return C
 end
 
-function sensitivity(liar_threshold_range::Range,
-                     variance_threshold_range::Union(Real, Range),
-                     parametrize::Bool)
-    res = Dict()
-    gridrows = length(liar_threshold_range)
-    gridcols = length(variance_threshold_range)
-    @inbounds for algo in ALGOS
-        res[algo] = Dict()
-        @inbounds for s in STATISTICS
-            res[algo][s] = Dict()
-            @inbounds for m in METRICS
-                res[algo][s][m] = zeros(gridrows, gridcols)
-            end
-        end
-    end
-    num_trials = length(liar_threshold_range)
-    @inbounds for (row, liar_threshold) in enumerate(liar_threshold_range)
-        percent_complete = round(row / num_trials * 100, 2)
-        print("Trial ",
-              string(row, "/", num_trials, " (", percent_complete,"%)\r"))
-
-        # Variance threshold parametrization
-        if parametrize
-            @inbounds for (col, variance_threshold) in enumerate(variance_threshold_range)
-                println("  variance_threshold: ", variance_threshold)
-                C = simulate(liar_threshold, variance_threshold=variance_threshold)
-                @inbounds for algo in ALGOS
-                    for s in STATISTICS
-                        for m in METRICS
-                            @inbounds res[algo][s][m][row,col] = C[algo][s][m]
-                        end
-                    end
-                end
-            end
-        else
-            C = simulate(liar_threshold)
-            res["iterate"] = C["iterate"]
-            @inbounds for algo in ALGOS
-                for s in STATISTICS
-                    for m in METRICS
-                        @inbounds res[algo][s][m][row,1] = C[algo][s][m]
-                    end
-                end
-            end
-        end
-    end
-    println("")
-
-    # Save data to file
-    variance_thresholds = (isa(variance_threshold_range, Range)) ?
-        convert(Array, variance_threshold_range) : variance_threshold_range
-    sim_data = {
-        "num_reporters" => REPORTERS,
-        "num_events" => EVENTS,
-        "collude" => COLLUDE,
-        "itermax" => ITERMAX,
-        "distort" => DISTORT,
-        "conspiracy" => CONSPIRACY,
-        "allwrong" => ALLWRONG,
-        "responses" => RESPONSES,
-        "indiscriminate" => INDISCRIMINATE,
-        "algos" => ALGOS,
-        "metrics" => METRICS,
-        "parametrize" => parametrize,
-        "liar_threshold" => convert(Array, liar_threshold_range),
-        "variance_threshold" => variance_thresholds,
-        "iterate" => res["iterate"],
-    }
-    @inbounds for algo in ALGOS
-        sim_data[algo] = [
-            "liars_bonus" => res[algo]["mean"]["liars_bonus"],
-            "beats" => res[algo]["mean"]["beats"],
-            "correct" => res[algo]["mean"]["correct"],
-            "components" => res[algo]["mean"]["components"],
-            "liars_bonus_std" => res[algo]["stderr"]["liars_bonus"],
-            "beats_std" => res[algo]["stderr"]["beats"],
-            "correct_std" => res[algo]["stderr"]["correct"],
-            "components_std" => res[algo]["stderr"]["components"],
-        ]
-    end
-    filename = "data/sim_" * repr(now()) * ".jld"
-    jldopen(filename, "w") do file
-        write(file, "sim_data", sim_data)
-    end
-    println("Data saved to ", filename)
-    return sim_data
-end
-
-sensitivity(ltr::Range, vtr::Real) = sensitivity(ltr, vtr, false)
-sensitivity(ltr::Range) = sensitivity(ltr, VARIANCE)
-
 function jldload(fname::String)
     jldopen(fname, "r") do file
         read(file, "sim_data")
@@ -405,4 +316,4 @@ end
 # Auto load data from REPL
 # covariance example: sim_2015-02-17T23:38:23.jld
 # cokurtosis example: data/sim_2015-02-25T19:19:59.jld
-~isinteractive() || (sim_data = jldload("data/sim_2015-02-26T22:33:41.jld"))
+# ~isinteractive() || (sim_data = jldload("data/sim_2015-02-26T22:33:41.jld"))
