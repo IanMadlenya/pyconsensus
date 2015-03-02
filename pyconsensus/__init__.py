@@ -43,7 +43,7 @@ from weightedstats import weighted_median
 from six.moves import xrange as range
 
 __title__      = "pyconsensus"
-__version__    = "0.5"
+__version__    = "0.5.1"
 __author__     = "Jack Peterson and Paul Sztorc"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"

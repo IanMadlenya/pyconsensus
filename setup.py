@@ -6,7 +6,7 @@ except ImportError:
 
 setup(
     name="pyconsensus",
-    version="0.5",
+    version="0.5.1",
     description="Standalone implementation of Augur's consensus mechanism",
     author="Jack Peterson and Paul Sztorc",
     author_email="<jack@tinybike.net>",
@@ -14,8 +14,8 @@ setup(
     maintainer_email="<jack@tinybike.net>",
     license="GPL",
     url="https://github.com/AugurProject/pyconsensus",
-    download_url = "https://github.com/AugurProject/pyconsensus/tarball/0.5",
+    download_url = "https://github.com/AugurProject/pyconsensus/tarball/0.5.1",
     packages=["pyconsensus"],
     install_requires=["numpy", "pandas", "six", "weightedstats"],
-    keywords = ["consensus", "prediction market", "PM", "truthcoin", "oracle", "PCA"]
+    keywords = ["consensus", "prediction market", "PM", "truthcoin", "augur", "oracle", "PCA"]
 )
