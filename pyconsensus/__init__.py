@@ -227,18 +227,6 @@ class Oracle(object):
             relative_contrib = contrib / np.sum(contrib)
             nc = self.nonconformity(relative_contrib, reports_filled)
 
-        elif self.algorithm == "covariance-unweighted":
-            row_mean = np.mean(reports_filled, axis=1)
-            centered = np.zeros(reports_filled.shape)
-            onesvect = np.ones(self.num_events)
-            for i in range(self.num_reporters):
-                centered[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
-            covmat = np.dot(centered, centered.T) / self.num_events
-            # Sum across columns of the (other) covariance matrix
-            contrib = np.sum(covmat, 1)
-            relative_contrib = contrib / np.sum(contrib)
-            nc = self.nonconformity(relative_contrib, reports_filled)
-
         # Sum over all events in the ballot; the ratio of this sum to
         # the total coskewness is that reporter's contribution.
         elif self.algorithm == "coskewness":
