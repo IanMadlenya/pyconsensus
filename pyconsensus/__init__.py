@@ -164,31 +164,55 @@ class Oracle(object):
         The reports matrix has reporters as rows and events as columns.
 
         """
-        # Compute the weighted mean (of all reporters) for each event
-        weighted_mean = np.ma.average(reports_filled,
-                                      axis=0,
-                                      weights=self.reputation.tolist())
-
-        # Each report's difference from the mean of its event (column)
-        mean_deviation = np.matrix(reports_filled - weighted_mean)
-
-        # Compute the unbiased weighted population covariance
-        # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
-        covariance_matrix = np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation) / float(1 - np.sum(self.reputation**2))
-
-        # H is the un-normalized eigenvector matrix
-        H = np.linalg.svd(covariance_matrix)[0]
-
-        # Normalize loading by Euclidean distance
-        first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
-        first_score = np.dot(mean_deviation, first_loading)
+        first_loading = np.ma.masked_array(np.zeros(self.num_events))
+        first_score = np.ma.masked_array(np.zeros(self.num_reporters))
 
         # Use the largest eigenvector only
         if self.algorithm == "sztorc":
+            
+            # Compute the weighted mean (of all reporters) for each event
+            weighted_mean = np.ma.average(reports_filled,
+                                          axis=0,
+                                          weights=self.reputation.tolist())
+
+            # Each report's difference from the mean of its event (column)
+            mean_deviation = np.matrix(reports_filled - weighted_mean)
+
+            # Compute the unbiased weighted population covariance
+            # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
+            covariance_matrix = np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation) / float(1 - np.sum(self.reputation**2))
+
+            # H is the un-normalized eigenvector matrix
+            H = np.linalg.svd(covariance_matrix)[0]
+
+            # Normalize loading by Euclidean distance
+            first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
+            first_score = np.dot(mean_deviation, first_loading)
+
             nc = self.nonconformity(first_score, reports_filled)
 
         # Fixed-variance threshold: eigenvalue-weighted sum of score vectors
         elif self.algorithm == "fixed-variance":
+
+            # Compute the weighted mean (of all reporters) for each event
+            weighted_mean = np.ma.average(reports_filled,
+                                          axis=0,
+                                          weights=self.reputation.tolist())
+
+            # Each report's difference from the mean of its event (column)
+            mean_deviation = np.matrix(reports_filled - weighted_mean)
+
+            # Compute the unbiased weighted population covariance
+            # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
+            covariance_matrix = np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation) / float(1 - np.sum(self.reputation**2))
+
+            # H is the un-normalized eigenvector matrix
+            H = np.linalg.svd(covariance_matrix)[0]
+
+            # Normalize loading by Euclidean distance
+            first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
+            first_score = np.dot(mean_deviation, first_loading)
+
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
             for i, var_exp in enumerate(variance_explained):
@@ -204,6 +228,26 @@ class Oracle(object):
 
         # Sztorc algorithm with normalized absolute inverse scores
         elif self.algorithm == "inverse-scores":
+
+            # Compute the weighted mean (of all reporters) for each event
+            weighted_mean = np.ma.average(reports_filled,
+                                          axis=0,
+                                          weights=self.reputation.tolist())
+
+            # Each report's difference from the mean of its event (column)
+            mean_deviation = np.matrix(reports_filled - weighted_mean)
+
+            # Compute the unbiased weighted population covariance
+            # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
+            covariance_matrix = np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation) / float(1 - np.sum(self.reputation**2))
+
+            # H is the un-normalized eigenvector matrix
+            H = np.linalg.svd(covariance_matrix)[0]
+
+            # Normalize loading by Euclidean distance
+            first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
+            first_score = np.dot(mean_deviation, first_loading)
+
             principal_components = np.linalg.svd(covariance_matrix)[0]
             first_loading = principal_components[:,0]
             first_loading = np.ma.masked_array(first_loading / np.sqrt(np.sum(first_loading**2)))
@@ -241,6 +285,25 @@ class Oracle(object):
 
         # Mixed strategy: fixed-variance threshold + cokurtosis
         elif self.algorithm == "FVT+cokurtosis":
+                        # Compute the weighted mean (of all reporters) for each event
+            weighted_mean = np.ma.average(reports_filled,
+                                          axis=0,
+                                          weights=self.reputation.tolist())
+
+            # Each report's difference from the mean of its event (column)
+            mean_deviation = np.matrix(reports_filled - weighted_mean)
+
+            # Compute the unbiased weighted population covariance
+            # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
+            covariance_matrix = np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation) / float(1 - np.sum(self.reputation**2))
+
+            # H is the un-normalized eigenvector matrix
+            H = np.linalg.svd(covariance_matrix)[0]
+
+            # Normalize loading by Euclidean distance
+            first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
+            first_score = np.dot(mean_deviation, first_loading)
+
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
             for i, var_exp in enumerate(variance_explained):
