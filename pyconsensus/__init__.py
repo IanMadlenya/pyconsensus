@@ -43,7 +43,7 @@ from weightedstats import weighted_median
 from six.moves import xrange as range
 
 __title__      = "pyconsensus"
-__version__    = "0.5.3"
+__version__    = "0.5.4"
 __author__     = "Jack Peterson and Paul Sztorc"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
@@ -279,7 +279,7 @@ class Oracle(object):
 
         # Sum over all events in the ballot; the ratio of this sum to
         # the total cokurtosis is that reporter's contribution.
-        elif self.algorithm == "cokurtosis":
+        elif self.algorithm == "cokurtosis" or self.algorithm == "cokurtosis-old":
             if self.aux is not None and "cokurt" in self.aux:
                 nc = self.nonconformity(self.aux["cokurt"], reports_filled)
 
