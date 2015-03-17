@@ -58,7 +58,7 @@ np.set_printoptions(linewidth=225,
 class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
-                 catch_tolerance=0.1, alpha=0.1, beta=0.5, verbose=False,
+                 catch_tolerance=0.1, alpha=0.1, verbose=False,
                  aux=None, algorithm="fixed-variance", variance_threshold=0.9):
         """
         Args:
@@ -77,7 +77,6 @@ class Oracle(object):
         self.event_bounds = event_bounds
         self.catch_tolerance = catch_tolerance
         self.alpha = alpha  # reputation smoothing parameter
-        self.beta = beta    # variance weight (for mixed algorithms)
         self.verbose = verbose
         self.algorithm = algorithm
         self.variance_threshold = variance_threshold
