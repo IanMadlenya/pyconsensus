@@ -43,7 +43,7 @@ from weightedstats import weighted_median
 from six.moves import xrange as range
 
 __title__      = "pyconsensus"
-__version__    = "0.5.4"
+__version__    = "0.5.5"
 __author__     = "Jack Peterson and Paul Sztorc"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
@@ -71,8 +71,12 @@ class Oracle(object):
             }
 
         """
+        self.NO = 1.0
+        self.YES = 2.0
+        self.BAD = 1.5
+        self.NA = 0.0
         self.reports = np.ma.masked_array(reports, np.isnan(reports))
-        self.num_reporters = len(reports)
+        self.num_reports = len(reports)
         self.num_events = len(reports[0])
         self.event_bounds = event_bounds
         self.catch_tolerance = catch_tolerance
@@ -85,9 +89,9 @@ class Oracle(object):
         self.aux = aux
         if reputation is None:
             self.weighted = False
-            self.total_rep = self.num_reporters
-            self.reptokens = np.ones(self.num_reporters).astype(int)
-            self.reputation = np.array([1 / float(self.num_reporters)] * self.num_reporters)
+            self.total_rep = self.num_reports
+            self.reptokens = np.ones(self.num_reports).astype(int)
+            self.reputation = np.array([1 / float(self.num_reports)] * self.num_reports)
         else:
             self.weighted = True
             self.total_rep = sum(np.array(reputation).ravel())
@@ -102,14 +106,13 @@ class Oracle(object):
         return v / np.sum(v)
 
     def catch(self, X):
-        """Forces continuous values into bins at -1, 0, and 1."""
-        center = 0
-        if X < center - self.catch_tolerance:
-            return -1
-        elif X > center + self.catch_tolerance:
-            return 1
+        """Forces continuous values into bins at NO, BAD, and YES."""
+        if X < self.BAD - self.catch_tolerance:
+            return self.NO
+        elif X > self.BAD + self.catch_tolerance:
+            return self.YES
         else:
-            return 0
+            return self.BAD
 
     def interpolate(self, reports):
         """Uses existing data and reputations to fill missing observations.
@@ -130,7 +133,7 @@ class Oracle(object):
                 active_reports = []
                 nan_indices = []
                 num_present = 0
-                for i in range(self.num_reporters):
+                for i in range(self.num_reports):
                     if reports[i,j] != np.nan:
                         total_active_reputation += self.reputation[i]
                         active_reputation.append(self.reputation[i])
@@ -151,6 +154,44 @@ class Oracle(object):
                 for nan_index in nan_indices:
                     reports[nan_index,j] = guess
         return reports
+
+    def row_centering(self, reports_filled, standardize, bias):
+        row_mean = np.mean(reports_filled, axis=1)
+        cntr = np.zeros(reports_filled.shape)
+        onesvect = np.ones(self.num_events)
+        for i in range(self.num_reports):
+            cntr[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
+        if standardize:
+            cntr /= np.std(cntr, axis=1, ddof=bias)
+        return cntr
+
+    def col_centering(self, reports_filled, standardize, bias):
+        # Compute the weighted mean (of all reporters) for each event
+        weighted_mean = np.dot(self.reputation, reports_filled)
+
+        # Each report's difference from the mean of its event (column)
+        cntr = np.matrix(reports_filled - weighted_mean)
+
+        # standardize 
+        if standardize:
+            cntr /= np.std(cntr, axis=0, ddof=bias)
+
+        # weight:
+        # elementwise multiply each column of the difference-from-mean matrix
+        # with the reputation vector
+        return np.multiply(cntr, np.matrix(self.reputation).T)
+
+    def collapse(self, reports_filled, order=4, standardize=True, axis=0, bias=0):
+        """Internal sum over all tensor fibers except first"""
+        # Center/whiten data
+        cntr = self.col_centering(reports_filled, 
+                                  standardize=standardize,
+                                  bias=bias)
+
+        # Vector collapse: internal sum across tensor fibers
+        # import pdb; pdb.set_trace()
+        rowsums = np.power(np.sum(cntr, 1).T, order - 1)
+        return rowsums.dot(cntr) / (self.num_reports - bias)
 
     def wpca(self, reports_filled):
         # Compute the weighted mean (of all reporters) for each event
@@ -174,7 +215,6 @@ class Oracle(object):
 
         return weighted_mean, mean_deviation, covariance_matrix, first_loading, first_score
 
-
     def lie_detector(self, reports_filled):
         """Calculates new reputations using a weighted Principal Component
         Analysis (PCA).
@@ -187,7 +227,7 @@ class Oracle(object):
 
         """
         first_loading = np.ma.masked_array(np.zeros(self.num_events))
-        first_score = np.ma.masked_array(np.zeros(self.num_reporters))
+        first_score = np.ma.masked_array(np.zeros(self.num_reports))
 
         # Use the largest eigenvector only
         if self.algorithm == "sztorc":
@@ -210,16 +250,6 @@ class Oracle(object):
             self.num_components = i
             nc = self.nonconformity(net_score, reports_filled)            
 
-        # Sztorc algorithm with normalized absolute inverse scores
-        elif self.algorithm == "inverse-scores":
-            weighted_mean, mean_deviation, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-            principal_components = np.linalg.svd(covariance_matrix)[0]
-            first_loading = principal_components[:,0]
-            first_loading = np.ma.masked_array(first_loading / np.sqrt(np.sum(first_loading**2)))
-            first_score = np.dot(mean_deviation, first_loading)
-            nc = 1 / np.abs(first_score)
-            nc /= np.sum(nc)
-
         # Sum over all events in the ballot; the ratio of this sum to
         # the total covariance (over all events, across all reporters)
         # is each reporter's contribution to the overall variability.
@@ -227,47 +257,59 @@ class Oracle(object):
             row_mean = np.mean(reports_filled, axis=1)
             centered = np.zeros(reports_filled.shape)
             onesvect = np.ones(self.num_events)
-            for i in range(self.num_reporters):
+            for i in range(self.num_reports):
                 centered[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
             # Unweighted: np.dot(centered, centered.T) / self.num_events
             covmat = np.dot(centered, np.ma.multiply(centered.T, self.reputation)) / float(1 - np.sum(self.reputation**2))
-            # Sum across columns of the (other) covariance matrix
+            # Sum across columns of the per-user covariance matrix
             contrib = np.sum(covmat, 1)
             relative_contrib = contrib / np.sum(contrib)
             nc = self.nonconformity(relative_contrib, reports_filled)
 
-        # Sum over all events in the ballot; the ratio of this sum to
-        # the total coskewness is that reporter's contribution.
-        elif self.algorithm == "coskewness":
-            if self.aux is not None and "coskew" in self.aux:
-                nc = self.nonconformity(self.aux["coskew"], reports_filled)
+        # Replicated rows
+        elif self.algorithm == "replicate":
+            B = []
+            for i in range(self.num_reports):
+                for j in range(self.reptokens[i]):
+                    B.append(reports_filled[i,:].tolist())
+            num_rows = len(B)
+            B = np.array(B)
+            row_mean = np.mean(B, axis=1)
+            centered = np.zeros(B.shape)
+            onesvect = np.ones(self.num_events)
+            for i in range(num_rows):
+                centered[i,:] = B[i,:] - onesvect * row_mean[i]
+            covmat = np.dot(centered, centered.T) / self.num_events
+
+            # Sum across columns of the (other) covariance matrix
+            contrib_rpl = np.sum(covmat, 1)
+            # relative_contrib_rpl = contrib_rpl / np.sum(contrib_rpl)
+            relative_contrib = np.zeros(self.num_reports)
+            row = 0
+            for i in range(self.num_reports):
+                relative_contrib[i] = self.reptokens[i] * contrib_rpl[row]
+                # relative_contrib[i] = contrib_rpl[row] # this gives the same result as "covariance"
+                row += self.reptokens[i]
+            relative_contrib /= np.sum(relative_contrib)
+
+            set1 = relative_contrib + np.abs(np.min(relative_contrib))
+            set2 = relative_contrib - np.max(relative_contrib)
+            old = np.dot(self.reputation.T, reports_filled)
+            new1 = np.dot(self.normalize(set1), reports_filled)
+            new2 = np.dot(self.normalize(set2), reports_filled)
+            ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
+            nc = set1 if ref_ind <= 0 else set2
 
         # Sum over all events in the ballot; the ratio of this sum to
         # the total cokurtosis is that reporter's contribution.
         elif self.algorithm == "cokurtosis" or self.algorithm == "cokurtosis-old":
             if self.aux is not None and "cokurt" in self.aux:
                 nc = self.nonconformity(self.aux["cokurt"], reports_filled)
-
-        # Mixed strategy: fixed-variance threshold + cokurtosis
-        elif self.algorithm == "FVT+cokurtosis":
-            weighted_mean, mean_deviation, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-            U, Sigma, Vt = np.linalg.svd(covariance_matrix)
-            variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
-            for i, var_exp in enumerate(variance_explained):
-                loading = U.T[i]
-                score = np.dot(mean_deviation, loading)
-                if i == 0:
-                    net_score = Sigma[i] * score
-                else:
-                    net_score += Sigma[i] * score
-                if var_exp > self.variance_threshold: break
-            self.num_components = i
-            nc_FVT = self.nonconformity(net_score, reports_filled)
-            if self.aux is not None and "cokurt" in self.aux:
-                nc_cokurt = self.nonconformity(self.aux["cokurt"], reports_filled)
-                nc = self.beta*nc_FVT + (1 - self.beta)*nc_cokurt
+            else:
+                nc = np.array(self.collapse(reports_filled, axis=0)).ravel()
 
         # Use adjusted nonconformity scores to update Reputation fractions
+        # import pdb; pdb.set_trace()
         this_rep = self.normalize(
             nc * (self.reputation / np.mean(self.reputation)).T
         )
@@ -399,8 +441,8 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv
     try:
-        short_opts = 'hxms'
-        long_opts = ['help', 'example', 'missing', 'scaled']
+        short_opts = 'hxmst'
+        long_opts = ['help', 'example', 'missing', 'scaled', 'test']
         opts, vals = getopt.getopt(argv[1:], short_opts, long_opts)
     except getopt.GetoptError as e:
         sys.stderr.write(e.msg)
@@ -410,6 +452,144 @@ def main(argv=None):
         if opt in ('-h', '--help'):
             print(__doc__)
             return 0
+        elif opt in ('-t', '--test'):
+            # reports = np.array([[  0.837698,   0.49452,   2.54352 ],
+            #                     [ -0.294096,  -0.39636,   0.728619],
+            #                     [ -1.62089 ,  -0.44919,   1.20592 ],
+            #                     [ -1.06458 ,  -0.68214,  -1.12841 ],
+            #                     [  2.14341 ,   0.7309 ,   0.644968],
+            #                     [ -0.284139,  -1.133  ,   1.98615 ],
+            #                     [  1.19879 ,   2.55633,  -0.526461],
+            #                     [ -0.032277,   0.11701,  -0.249265],
+            #                     [ -1.02516 ,  -0.44665,   2.50556 ],
+            #                     [ -0.515272,  -0.578  ,   0.515139],
+            #                     [  0.259474,  -1.24193,   0.105051],
+            #                     [  0.178546,  -0.80547,  -0.016838],
+            #                     [ -0.607696,  -0.21319,  -1.40657 ],
+            #                     [  0.372248,   0.93341,  -0.667086],
+            #                     [ -0.099814,   0.52698,  -0.253867],
+            #                     [  0.743166,  -0.79375,   2.11131 ],
+            #                     [  0.109262,  -1.28021,  -0.415184],
+            #                     [  0.499346,  -0.95897,  -2.24336 ],
+            #                     [ -0.191825,  -0.59756,  -0.63292 ],
+            #                     [ -1.98255 ,  -1.5936 ,  -0.935766],
+            #                     [ -0.317612,   1.33143,  -0.46866 ],
+            #                     [  0.666652,  -0.81507,   0.370959],
+            #                     [ -0.761136,   0.10966,  -0.997161],
+            #                     [ -1.09972 ,   0.28247,  -0.846566]])
+            # # reputation = [0.4, 1.0, 0.6]
+            # reputation = [ 91 ,
+            #                65 ,
+            #                57 ,
+            #                34 ,
+            #                83 ,
+            #                70 ,
+            #                74 ,
+            #                26 ,
+            #                37 ,
+            #                21 ,
+            #                62 ,
+            #                22 ,
+            #                91 ,
+            #                83 ,
+            #                89 ,
+            #                39 ,
+            #                20 ,
+            #                83 ,
+            #                36 ,
+            #                75 ,
+            #                43 ,
+            #                78 ,
+            #                83 ,
+            #                17 ]
+            reputation = [
+                0.031033099688052984,
+                0.06603411776796245,
+                0.06603411776796245,
+                0.02966635564758383,
+                0.06603411776796245,
+                0.029557191000632158,
+                0.0281089563813696,
+                0.031817973430730624,
+                0.03186036639673597,
+                0.06603411776796245,
+                0.02309958697586698,
+                0.025229389348775236,
+                0.0340521799192279,
+                0.03512430867041376,
+                0.06603411776796245,
+                0.024612072665886477,
+                0.030564305942646947,
+                0.031504825512057105,
+                0.027273890173105043,
+                0.06603411776796245,
+                0.03253880677695827,
+                0.03127655854061946,
+                0.027577138895966653,
+                0.06603411776796245,
+                0.03286416965763393,
+            ]
+            reports = np.array([[  1.0,  0.0,  0.0,  1.0,  0.0,  0.0,  0.0,  1.0, -1.0,  1.0 ],
+                                [ -1.0,  1.0,  1.0,  0.0, -1.0, -1.0, -1.0,  0.0, -1.0,  0.0 ],
+                                [ -1.0,  1.0,  1.0,  0.0, -1.0, -1.0, -1.0,  0.0, -1.0,  0.0 ],
+                                [  0.0, -1.0,  0.0,  0.0,  0.0, -1.0, -1.0, -1.0,  1.0,  1.0 ],
+                                [ -1.0,  1.0,  1.0,  0.0, -1.0, -1.0, -1.0,  0.0, -1.0,  0.0 ],
+                                [ -1.0,  0.0,  0.0, -1.0,  0.0,  0.0,  1.0, -1.0,  0.0,  0.0 ],
+                                [  0.0,  1.0,  0.0,  1.0,  0.0,  0.0,  1.0,  1.0,  0.0, -1.0 ],
+                                [  0.0,  0.0, -1.0, -1.0,  0.0,  1.0, -1.0,  1.0,  1.0, -1.0 ],
+                                [  0.0,  0.0,  0.0,  1.0,  0.0,  1.0, -1.0,  1.0,  1.0,  0.0 ],
+                                [ -1.0,  1.0,  1.0,  0.0, -1.0, -1.0, -1.0,  0.0, -1.0,  0.0 ],
+                                [ -1.0,  1.0,  0.0,  0.0, -1.0,  1.0,  1.0,  1.0, -1.0,  0.0 ],
+                                [  1.0, -1.0, -1.0, -1.0,  0.0,  0.0,  1.0, -1.0,  1.0, -1.0 ],
+                                [  1.0, -1.0,  1.0, -1.0,  1.0,  1.0, -1.0,  1.0,  1.0,  1.0 ],
+                                [  0.0,  1.0,  0.0, -1.0,  0.0,  1.0, -1.0,  0.0, -1.0,  1.0 ],
+                                [ -1.0,  1.0,  1.0,  0.0, -1.0, -1.0, -1.0,  0.0, -1.0,  0.0 ],
+                                [  0.0,  0.0,  1.0, -1.0,  0.0,  0.0,  0.0, -1.0,  0.0,  1.0 ],
+                                [ -1.0, -1.0,  1.0, -1.0, -1.0,  1.0,  0.0, -1.0,  1.0,  0.0 ],
+                                [ -1.0,  1.0, -1.0,  1.0,  0.0, -1.0, -1.0,  1.0,  1.0,  1.0 ],
+                                [ -1.0, -1.0,  0.0, -1.0,  1.0,  0.0, -1.0,  0.0, -1.0,  0.0 ],
+                                [ -1.0,  1.0,  1.0,  0.0, -1.0, -1.0, -1.0,  0.0, -1.0,  0.0 ],
+                                [ -1.0, -1.0, -1.0,  1.0, -1.0,  1.0,  0.0,  1.0, -1.0,  1.0 ],
+                                [  1.0,  1.0,  0.0,  1.0,  1.0,  0.0, -1.0,  1.0,  1.0,  1.0 ],
+                                [ -1.0,  1.0,  1.0,  1.0, -1.0,  0.0,  1.0,  0.0, -1.0, -1.0 ],
+                                [ -1.0,  1.0,  1.0,  0.0, -1.0, -1.0, -1.0,  0.0, -1.0,  0.0 ],
+                                [ -1.0,  1.0,  1.0,  1.0, -1.0,  0.0,  1.0,  0.0, -1.0, -1.0 ]])
+            aux = {
+                "cokurt": [
+                    -0.00611437 ,
+                     0.133337   ,
+                     0.133337   ,
+                    -0.00933107 ,
+                     0.133337   ,
+                     0.00332694 ,
+                     0.00715548 ,
+                    -0.0096433  ,
+                    -0.00320225 ,
+                     0.133337   ,
+                     0.0167826  ,
+                    -0.0315066  ,
+                    -0.0101499  ,
+                     0.040571   ,
+                     0.133337   ,
+                     0.0156032  ,
+                     0.004482   ,
+                     0.00613153 ,
+                    -0.0010924  ,
+                     0.133337   ,
+                    -0.0127911  ,
+                     0.00157463 ,
+                     0.0274216  ,
+                     0.133337   ,
+                     0.0274216  ,
+                ],
+            }
+            oracle = Oracle(reports=reports,
+                            reputation=reputation,
+                            algorithm="cokurtosis",
+                            aux=aux)
+            A = oracle.consensus()
+            # print(pd.DataFrame(A["events"]))
+            print(pd.DataFrame(A["agents"]))
         elif opt in ('-x', '--example'):
             # # new: true=1, false=-1, indeterminate=0.5, no response=0
             reports = np.array([[  1,  1, -1, -1],
