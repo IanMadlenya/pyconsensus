@@ -155,16 +155,6 @@ class Oracle(object):
                     reports[nan_index,j] = guess
         return reports
 
-    def row_centering(self, reports_filled, standardize, bias):
-        row_mean = np.mean(reports_filled, axis=1)
-        cntr = np.zeros(reports_filled.shape)
-        onesvect = np.ones(self.num_events)
-        for i in range(self.num_reports):
-            cntr[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
-        if standardize:
-            cntr /= np.std(cntr, axis=1, ddof=bias)
-        return cntr
-
     def col_centering(self, reports_filled, standardize, bias):
         # Compute the weighted mean (of all reporters) for each event
         weighted_mean = np.dot(self.reputation, reports_filled)
@@ -232,7 +222,6 @@ class Oracle(object):
         # Use the largest eigenvector only
         if self.algorithm == "sztorc":
             weighted_mean, mean_deviation, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-            # print covariance_matrix.data
             nc = self.nonconformity(first_score, reports_filled)
 
         # Fixed-variance threshold: eigenvalue-weighted sum of score vectors
@@ -255,20 +244,7 @@ class Oracle(object):
         # the total covariance (over all events, across all reporters)
         # is each reporter's contribution to the overall variability.
         elif self.algorithm == "covariance":
-            if self.aux is not None and "cov" in self.aux:
-                nc = self.nonconformity(self.aux["cov"], reports_filled)
-            else:
-                row_mean = np.mean(reports_filled, axis=1)
-                centered = np.zeros(reports_filled.shape)
-                onesvect = np.ones(self.num_events)
-                for i in range(self.num_reports):
-                    centered[i,:] = reports_filled[i,:] - onesvect * row_mean[i]
-                # Unweighted: np.dot(centered, centered.T) / self.num_events
-                covmat = np.dot(centered, np.ma.multiply(centered.T, self.reputation)) / float(1 - np.sum(self.reputation**2))
-                # Sum across columns of the per-user covariance matrix
-                contrib = np.sum(covmat, 1)
-                relative_contrib = contrib / np.sum(contrib)
-                nc = self.nonconformity(relative_contrib, reports_filled)
+            nc = self.nonconformity(self.aux["cov"], reports_filled)
 
         # Sum over all events in the ballot; the ratio of this sum to
         # the total cokurtosis is that reporter's contribution.
@@ -278,9 +254,8 @@ class Oracle(object):
             else:
                 nc = np.array(self.collapse(reports_filled, axis=0)).ravel()
 
-        elif self.algorithm == "harmonic":
-            if self.aux is not None and "H" in self.aux:
-                nc = self.nonconformity(self.aux["H"], reports_filled)
+        elif self.algorithm == "virial":
+            nc = self.nonconformity(self.aux["H"], reports_filled)
 
         # Use adjusted nonconformity scores to update Reputation fractions
         # import pdb; pdb.set_trace()
