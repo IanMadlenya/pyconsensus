@@ -278,7 +278,7 @@ class Oracle(object):
             else:
                 nc = np.array(self.collapse(reports_filled, axis=0)).ravel()
 
-        elif self.algoritm == "harmonic":
+        elif self.algorithm == "harmonic":
             if self.aux is not None and "H" in self.aux:
                 nc = self.nonconformity(self.aux["H"], reports_filled)
 
