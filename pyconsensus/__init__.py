@@ -197,7 +197,21 @@ class Oracle(object):
         covariance_matrix = np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation) / float(1 - np.sum(self.reputation**2))
 
         # H is the un-normalized eigenvector matrix
-        H = np.linalg.svd(covariance_matrix)[0]
+        try:
+            H = np.linalg.svd(covariance_matrix)[0]
+        except Exception as exc:
+            print exc
+            print
+            print "Covariance matrix:"
+            print covariance_matrix.data
+            print
+            print "Reports (filled):"
+            print reports_filled.data
+            print 
+            print "Reputation:"
+            print self.reputation
+            print
+            import pdb; pdb.set_trace()
 
         # Normalize loading by Euclidean distance
         first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
