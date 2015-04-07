@@ -190,11 +190,13 @@ class Oracle(object):
                                       weights=self.reputation.tolist())
 
         # Each report's difference from the mean of its event (column)
-        mean_deviation = np.matrix(reports_filled - weighted_mean)
+        wcd = np.matrix(reports_filled - weighted_mean)
+        tokens = [int(r * 1e6) for r in self.reputation]
 
         # Compute the unbiased weighted population covariance
         # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
-        covariance_matrix = np.ma.multiply(mean_deviation.T, self.reputation).dot(mean_deviation) / float(1 - np.sum(self.reputation**2))
+        # wcd.T.dot(R).dot(wcd) / float(1 - np.sum(self.reputation**2))
+        covariance_matrix = np.ma.multiply(wcd.T, tokens).dot(wcd) / float(np.sum(tokens) - 1)
 
         # H is the un-normalized eigenvector matrix
         try:
@@ -215,9 +217,15 @@ class Oracle(object):
 
         # Normalize loading by Euclidean distance
         first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
-        first_score = np.dot(mean_deviation, first_loading)
+        first_score = np.dot(wcd, first_loading)
 
-        return weighted_mean, mean_deviation, covariance_matrix, first_loading, first_score
+        # print "pyconsensus svd:"
+        # print np.array(first_loading)
+        # print np.array(np.ma.masked_array(H[:,1] / np.sqrt(np.sum(H[:,1]**2))))
+        # print np.array(np.ma.masked_array(H[:,2] / np.sqrt(np.sum(H[:,2]**2))))
+        # print np.array(np.ma.masked_array(H[:,3] / np.sqrt(np.sum(H[:,3]**2))))
+
+        return weighted_mean, wcd, covariance_matrix, first_loading, first_score
 
     def lie_detector(self, reports_filled):
         """Calculates new reputations using a weighted Principal Component
@@ -235,17 +243,61 @@ class Oracle(object):
 
         # Use the largest eigenvector only
         if self.algorithm == "sztorc":
-            weighted_mean, mean_deviation, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
+            weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             nc = self.nonconformity(first_score, reports_filled)
+
+        elif self.algorithm == "big-five":
+            weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
+            U, Sigma, Vt = np.linalg.svd(covariance_matrix)
+            variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
+            for i in range(5):
+                loading = U.T[i]
+                score = np.dot(wcd, loading)
+                if i == 0:
+                    net_score = Sigma[i] * score
+                else:
+                    net_score += Sigma[i] * score
+            nc = self.nonconformity(net_score, reports_filled)
+
+        elif self.algorithm == "first-third":
+            weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
+            U, Sigma, Vt = np.linalg.svd(covariance_matrix)
+            variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
+            for i in range(int(np.ceil(self.num_events / 3.0))):
+                loading = U.T[i]
+                score = np.dot(wcd, loading)
+                if i == 0:
+                    net_score = Sigma[i] * score
+                else:
+                    net_score += Sigma[i] * score
+            if self.aux is not None and "cokurt" in self.aux:
+                net_score += self.aux["cokurt"]
+            # print "net_score:"
+            # print np.array(net_score)
+            # print
+            nc = self.nonconformity(net_score, reports_filled)
 
         # Fixed-variance threshold: eigenvalue-weighted sum of score vectors
         elif self.algorithm == "fixed-variance":
-            weighted_mean, mean_deviation, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
+            weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
+            # Sigma /= np.sum(Sigma)
+            # print "U:"
+            # print U
+            # print "Sigma:"
+            # print Sigma
+            # print
+            # print np.var(U)
+            # print 
+            # print "Total variance:"
+            # print np.trace(covariance_matrix)
+            # print
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
+            # import pdb; pdb.set_trace()
+            # variance_explained = np.cumsum(Sigma)
             for i, var_exp in enumerate(variance_explained):
                 loading = U.T[i]
-                score = np.dot(mean_deviation, loading)
+                score = np.dot(wcd, loading)
                 if i == 0:
                     net_score = Sigma[i] * score
                 else:
