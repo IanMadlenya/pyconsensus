@@ -272,29 +272,13 @@ class Oracle(object):
                     net_score += Sigma[i] * score
             if self.aux is not None and "cokurt" in self.aux:
                 net_score += self.aux["cokurt"]
-            # print "net_score:"
-            # print np.array(net_score)
-            # print
             nc = self.nonconformity(net_score, reports_filled)
 
         # Fixed-variance threshold: eigenvalue-weighted sum of score vectors
         elif self.algorithm == "fixed-variance":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
-            # Sigma /= np.sum(Sigma)
-            # print "U:"
-            # print U
-            # print "Sigma:"
-            # print Sigma
-            # print
-            # print np.var(U)
-            # print 
-            # print "Total variance:"
-            # print np.trace(covariance_matrix)
-            # print
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
-            # import pdb; pdb.set_trace()
-            # variance_explained = np.cumsum(Sigma)
             for i, var_exp in enumerate(variance_explained):
                 loading = U.T[i]
                 score = np.dot(wcd, loading)
