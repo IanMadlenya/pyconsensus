@@ -43,7 +43,7 @@ from weightedstats import weighted_median
 from six.moves import xrange as range
 
 __title__      = "pyconsensus"
-__version__    = "0.5.5"
+__version__    = "0.5.6"
 __author__     = "Jack Peterson and Paul Sztorc"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
@@ -155,34 +155,6 @@ class Oracle(object):
                     reports[nan_index,j] = guess
         return reports
 
-    def col_centering(self, reports_filled, standardize, bias):
-        # Compute the weighted mean (of all reporters) for each event
-        weighted_mean = np.dot(self.reputation, reports_filled)
-
-        # Each report's difference from the mean of its event (column)
-        cntr = np.matrix(reports_filled - weighted_mean)
-
-        # standardize 
-        if standardize:
-            cntr /= np.std(cntr, axis=0, ddof=bias)
-
-        # weight:
-        # elementwise multiply each column of the difference-from-mean matrix
-        # with the reputation vector
-        return np.multiply(cntr, np.matrix(self.reputation).T)
-
-    def collapse(self, reports_filled, order=4, standardize=True, axis=0, bias=0):
-        """Internal sum over all tensor fibers except first"""
-        # Center/whiten data
-        cntr = self.col_centering(reports_filled, 
-                                  standardize=standardize,
-                                  bias=bias)
-
-        # Vector collapse: internal sum across tensor fibers
-        # import pdb; pdb.set_trace()
-        rowsums = np.power(np.sum(cntr, 1).T, order - 1)
-        return rowsums.dot(cntr) / (self.num_reports - bias)
-
     def wpca(self, reports_filled):
         # Compute the weighted mean (of all reporters) for each event
         weighted_mean = np.ma.average(reports_filled,
@@ -195,7 +167,7 @@ class Oracle(object):
 
         # Compute the unbiased weighted population covariance
         # (for uniform weights, equal to np.cov(reports_filled.T, bias=1))
-        # wcd.T.dot(R).dot(wcd) / float(1 - np.sum(self.reputation**2))
+        # wcd.T.dot(R).dot(wcd) / float(np.sum(tokens) - 1)
         covariance_matrix = np.ma.multiply(wcd.T, tokens).dot(wcd) / float(np.sum(tokens) - 1)
 
         # H is the un-normalized eigenvector matrix
@@ -203,35 +175,24 @@ class Oracle(object):
             H = np.linalg.svd(covariance_matrix)[0]
         except Exception as exc:
             print exc
-            print
-            print "Covariance matrix:"
-            print covariance_matrix.data
-            print
-            print "Reports (filled):"
-            print reports_filled.data
-            print 
-            print "Reputation:"
-            print self.reputation
-            print
             import pdb; pdb.set_trace()
 
         # Normalize loading by Euclidean distance
         first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
         first_score = np.dot(wcd, first_loading)
 
-        # print "pyconsensus svd:"
-        # print np.array(first_loading)
-        # print np.array(np.ma.masked_array(H[:,1] / np.sqrt(np.sum(H[:,1]**2))))
-        # print np.array(np.ma.masked_array(H[:,2] / np.sqrt(np.sum(H[:,2]**2))))
-        # print np.array(np.ma.masked_array(H[:,3] / np.sqrt(np.sum(H[:,3]**2))))
+        if self.verbose:
+            print "pyconsensus svd:"
+            print np.array(first_loading)
+            print np.array(np.ma.masked_array(H[:,1] / np.sqrt(np.sum(H[:,1]**2))))
+            print np.array(np.ma.masked_array(H[:,2] / np.sqrt(np.sum(H[:,2]**2))))
+            print np.array(np.ma.masked_array(H[:,3] / np.sqrt(np.sum(H[:,3]**2))))
+            print
 
         return weighted_mean, wcd, covariance_matrix, first_loading, first_score
 
     def lie_detector(self, reports_filled):
-        """Calculates new reputations using a weighted Principal Component
-        Analysis (PCA).
-
-        Weights are the number of coins people start with, so the aim of this
+        """Weights are the number of coins people start with, so the aim of this
         weighting is to count 1 report for each of their coins -- e.g., guy with 10
         coins effectively gets 10 reports, guy with 1 coin gets 1 report, etc.
         
@@ -259,19 +220,26 @@ class Oracle(object):
                     net_score += Sigma[i] * score
             nc = self.nonconformity(net_score, reports_filled)
 
-        elif self.algorithm == "first-third":
+        # Fixed-variance threshold: eigenvalue-weighted sum of score vectors
+        elif self.algorithm == "absolute":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
-            for i in range(int(np.ceil(self.num_events / 3.0))):
+            net_score = np.zeros(self.num_reports)
+            for i, var_exp in enumerate(variance_explained):
                 loading = U.T[i]
-                score = np.dot(wcd, loading)
-                if i == 0:
-                    net_score = Sigma[i] * score
-                else:
-                    net_score += Sigma[i] * score
-            if self.aux is not None and "cokurt" in self.aux:
-                net_score += self.aux["cokurt"]
+                score = Sigma[i] * wcd.dot(loading)
+                if score[0] < 0:
+                    score *= -1
+                net_score += score
+                if self.verbose:
+                    print "  Eigenvector %d:" % i, np.round(loading, 6)
+                    print "  Eigenvalue %d: " % i, Sigma[i], "(%s%% variance explained)" % np.round(var_exp * 100, 3)
+                    print "  Score:        ", np.round(score, 6)
+                    print "  Nonconformity:", np.round(net_score, 6)
+                    print
+                if var_exp >= self.variance_threshold: break
+            self.num_components = i
             nc = self.nonconformity(net_score, reports_filled)
 
         # Fixed-variance threshold: eigenvalue-weighted sum of score vectors
@@ -279,16 +247,26 @@ class Oracle(object):
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
+            net_score = np.zeros(self.num_reports)
+            negative = False
             for i, var_exp in enumerate(variance_explained):
+                # net_score += Sigma[i] * wcd.dot(U.T[i])
                 loading = U.T[i]
-                score = np.dot(wcd, loading)
-                if i == 0:
-                    net_score = Sigma[i] * score
-                else:
-                    net_score += Sigma[i] * score
-                if var_exp > self.variance_threshold: break
+                if i == 0 and loading[0] < 0:
+                    negative = True
+                if negative:
+                    loading *= -1
+                score = Sigma[i] * wcd.dot(loading)
+                net_score += score
+                if self.verbose:
+                    print "  Eigenvector %d:" % i, np.round(loading, 6)
+                    print "  Eigenvalue %d: " % i, Sigma[i], "(%s%% variance explained)" % np.round(var_exp * 100, 3)
+                    print "  Score:        ", np.round(score, 6)
+                    print "  Nonconformity:", np.round(net_score, 6)
+                    print
+                if var_exp >= self.variance_threshold: break
             self.num_components = i
-            nc = self.nonconformity(net_score, reports_filled)            
+            nc = self.nonconformity(net_score, reports_filled)
 
         # Sum over all events in the ballot; the ratio of this sum to
         # the total covariance (over all events, across all reporters)
@@ -301,17 +279,18 @@ class Oracle(object):
         elif self.algorithm == "cokurtosis":
             if self.aux is not None and "cokurt" in self.aux:
                 nc = self.nonconformity(self.aux["cokurt"], reports_filled)
-            else:
-                nc = np.array(self.collapse(reports_filled, axis=0)).ravel()
 
         elif self.algorithm == "virial":
             nc = self.nonconformity(self.aux["H"], reports_filled)
 
         # Use adjusted nonconformity scores to update Reputation fractions
-        # import pdb; pdb.set_trace()
         this_rep = self.normalize(
             nc * (self.reputation / np.mean(self.reputation)).T
         )
+        if self.verbose:
+            print "  Adjusted:  ", nc
+            print "  Reputation:", this_rep
+            print
         return {
             "first_loading": first_loading,
             "old_rep": self.reputation.T,
@@ -390,13 +369,12 @@ class Oracle(object):
         # General Participation
         percent_na = 1 - np.mean(participation_columns)
 
-        # Possibly integrate two functions of participation? Chicken and egg problem...
-        if self.verbose:
-            print('*Participation Information*')
-            print('Voter Turnout by question')
-            print(participation_columns)
-            print('Voter Turnout across questions')
-            print(participation_rows)
+        # if self.verbose:
+        #     print('Participation')
+        #     print('Voter Turnout (by question)')
+        #     print(participation_columns)
+        #     print('Voter Turnout (across questions)')
+        #     print(participation_rows)
 
         # Combine Information
         # Row
