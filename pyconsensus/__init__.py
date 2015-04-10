@@ -60,7 +60,7 @@ class Oracle(object):
     def __init__(self, reports=None, event_bounds=None, reputation=None,
                  catch_tolerance=0.1, alpha=0.1, verbose=False,
                  aux=None, algorithm="fixed-variance", variance_threshold=0.9,
-                 components=5):
+                 max_components=5):
         """
         Args:
           reports (list-of-lists): reports matrix; rows = reporters, columns = Events.
@@ -88,7 +88,10 @@ class Oracle(object):
         self.num_components = -1
         self.convergence = False
         self.aux = aux
-        self.components = components
+        if self.num_events <= max_components:
+            self.max_components = max_components
+        else:
+            self.max_components = self.num_events
         if reputation is None:
             self.weighted = False
             self.total_rep = self.num_reports
@@ -184,11 +187,9 @@ class Oracle(object):
         first_score = np.dot(wcd, first_loading)
 
         if self.verbose:
-            print "pyconsensus svd:"
-            print np.array(first_loading)
-            print np.array(np.ma.masked_array(H[:,1] / np.sqrt(np.sum(H[:,1]**2))))
-            print np.array(np.ma.masked_array(H[:,2] / np.sqrt(np.sum(H[:,2]**2))))
-            print np.array(np.ma.masked_array(H[:,3] / np.sqrt(np.sum(H[:,3]**2))))
+            print "Normalized eigenvectors:"
+            for i in range(len(H)):
+                print np.array(np.ma.masked_array(H[:,i] / np.sqrt(np.sum(H[:,i]**2))))
             print
 
         return weighted_mean, wcd, covariance_matrix, first_loading, first_score
@@ -204,20 +205,19 @@ class Oracle(object):
         first_loading = np.ma.masked_array(np.zeros(self.num_events))
         first_score = np.ma.masked_array(np.zeros(self.num_reports))
 
+        if self.verbose:
+            print "pyconsensus [%s]:\n" % self.algorithm
+
         # Use the largest eigenvector only
         if self.algorithm == "sztorc":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-            if self.aux is not None and "cokurt" in self.aux:
-                nc = self.nonconformity(first_score + self.aux["cokurt"]*0.5, reports_filled)
-            else:
-                nc = self.nonconformity(first_score, reports_filled)
+            nc = self.nonconformity(first_score, reports_filled)
 
         elif self.algorithm == "big-five":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
-            total_variance = np.trace(covariance_matrix)
             net_score = np.zeros(self.num_reports)
-            for i in range(self.components):
+            for i in range(self.max_components):
                 loading = U.T[i]
                 if loading[0] < 0:
                     loading *= -1
@@ -225,8 +225,8 @@ class Oracle(object):
                 net_score += score
                 if self.verbose:
                     print "  Eigenvector %d:" % i, np.round(loading, 6)
-                    print "  Eigenvalue %d: " % i, Sigma[i], "(%s%% variance explained)" % np.round(Sigma[i] / total_variance * 100, 3)
-                    print "  Score:        ", np.round(score, 6)
+                    print "  Eigenvalue %d: " % i, Sigma[i]
+                    print "  Projection:    ", np.round(score, 6)
                     print "  Nonconformity:", np.round(net_score, 6)
                     print
             nc = self.nonconformity(net_score, reports_filled)
@@ -234,18 +234,17 @@ class Oracle(object):
         elif self.algorithm == "absolute":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
-            total_variance = np.trace(covariance_matrix)
             net_score = np.zeros(self.num_reports)
-            for i in range(3):
+            for i in range(self.max_components):
                 loading = U.T[i]
                 if loading[0] < 0:
                     loading *= -1
-                score = Sigma[i] * wcd.dot(loading)
+                score = wcd.dot(loading)
                 net_score += score
                 if self.verbose:
                     print "  Eigenvector %d:" % i, np.round(loading, 6)
-                    print "  Eigenvalue %d: " % i, Sigma[i], "(%s%% variance explained)" % np.round(Sigma[i] / total_variance * 100, 3)
-                    print "  Score:        ", np.round(score, 6)
+                    print "  Eigenvalue %d: " % i, Sigma[i]
+                    print "  Projection:    ", np.round(score, 6)
                     print "  Nonconformity:", np.round(net_score, 6)
                     print
             nc = self.nonconformity(net_score, reports_filled)
@@ -266,7 +265,7 @@ class Oracle(object):
                 if self.verbose:
                     print "  Eigenvector %d:" % i, np.round(loading, 6)
                     print "  Eigenvalue %d: " % i, Sigma[i], "(%s%% variance explained)" % np.round(var_exp * 100, 3)
-                    print "  Score:        ", np.round(score, 6)
+                    print "  Projection:    ", np.round(score, 6)
                     print "  Nonconformity:", np.round(net_score, 6)
                     print "  Variance explained:", var_exp, i
                     print
@@ -281,8 +280,7 @@ class Oracle(object):
         # Sum over all events in the ballot; the ratio of this sum to
         # the total cokurtosis is that reporter's contribution.
         elif self.algorithm == "cokurtosis":
-            if self.aux is not None and "cokurt" in self.aux:
-                nc = self.nonconformity(self.aux["cokurt"], reports_filled)
+            nc = self.nonconformity(self.aux["cokurt"], reports_filled)
 
         elif self.algorithm == "virial":
             nc = self.nonconformity(self.aux["H"], reports_filled)
