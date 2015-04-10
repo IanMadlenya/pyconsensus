@@ -271,10 +271,6 @@ class Oracle(object):
                     print
                 if var_exp >= self.variance_threshold: break
             self.num_components = i + 1
-            if self.num_components == 0:
-                import pdb; pdb.set_trace()
-            if self.verbose:
-                print self.num_components, "components"
             nc = self.nonconformity(net_score, reports_filled)
 
         # Sum over all events in the ballot; the ratio of this sum to
@@ -283,7 +279,7 @@ class Oracle(object):
             nc = self.nonconformity(self.aux["cokurt"], reports_filled)
 
         elif self.algorithm == "virial":
-            nc = self.nonconformity(self.aux["H"], reports_filled)
+            nc = self.nonconformity(self.aux["virial"], reports_filled)
 
         # Use adjusted nonconformity scores to update Reputation fractions
         this_rep = self.normalize(
