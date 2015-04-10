@@ -43,7 +43,7 @@ from weightedstats import weighted_median
 from six.moves import xrange as range
 
 __title__      = "pyconsensus"
-__version__    = "0.5.6"
+__version__    = "0.5.7"
 __author__     = "Jack Peterson and Paul Sztorc"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
@@ -59,7 +59,8 @@ class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
                  catch_tolerance=0.1, alpha=0.1, verbose=False,
-                 aux=None, algorithm="fixed-variance", variance_threshold=0.9):
+                 aux=None, algorithm="fixed-variance", variance_threshold=0.9,
+                 components=5):
         """
         Args:
           reports (list-of-lists): reports matrix; rows = reporters, columns = Events.
@@ -87,6 +88,7 @@ class Oracle(object):
         self.num_components = -1
         self.convergence = False
         self.aux = aux
+        self.components = components
         if reputation is None:
             self.weighted = False
             self.total_rep = self.num_reports
@@ -205,41 +207,47 @@ class Oracle(object):
         # Use the largest eigenvector only
         if self.algorithm == "sztorc":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-            nc = self.nonconformity(first_score, reports_filled)
+            if self.aux is not None and "cokurt" in self.aux:
+                nc = self.nonconformity(first_score + self.aux["cokurt"]*0.5, reports_filled)
+            else:
+                nc = self.nonconformity(first_score, reports_filled)
 
         elif self.algorithm == "big-five":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
-            variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
-            for i in range(5):
-                loading = U.T[i]
-                score = np.dot(wcd, loading)
-                if i == 0:
-                    net_score = Sigma[i] * score
-                else:
-                    net_score += Sigma[i] * score
-            nc = self.nonconformity(net_score, reports_filled)
-
-        # Fixed-variance threshold: eigenvalue-weighted sum of score vectors
-        elif self.algorithm == "absolute":
-            weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-            U, Sigma, Vt = np.linalg.svd(covariance_matrix)
-            variance_explained = np.cumsum(Sigma / np.trace(covariance_matrix))
+            total_variance = np.trace(covariance_matrix)
             net_score = np.zeros(self.num_reports)
-            for i, var_exp in enumerate(variance_explained):
+            for i in range(self.components):
                 loading = U.T[i]
+                if loading[0] < 0:
+                    loading *= -1
                 score = Sigma[i] * wcd.dot(loading)
-                if score[0] < 0:
-                    score *= -1
                 net_score += score
                 if self.verbose:
                     print "  Eigenvector %d:" % i, np.round(loading, 6)
-                    print "  Eigenvalue %d: " % i, Sigma[i], "(%s%% variance explained)" % np.round(var_exp * 100, 3)
+                    print "  Eigenvalue %d: " % i, Sigma[i], "(%s%% variance explained)" % np.round(Sigma[i] / total_variance * 100, 3)
                     print "  Score:        ", np.round(score, 6)
                     print "  Nonconformity:", np.round(net_score, 6)
                     print
-                if var_exp >= self.variance_threshold: break
-            self.num_components = i
+            nc = self.nonconformity(net_score, reports_filled)
+
+        elif self.algorithm == "absolute":
+            weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
+            U, Sigma, Vt = np.linalg.svd(covariance_matrix)
+            total_variance = np.trace(covariance_matrix)
+            net_score = np.zeros(self.num_reports)
+            for i in range(3):
+                loading = U.T[i]
+                if loading[0] < 0:
+                    loading *= -1
+                score = Sigma[i] * wcd.dot(loading)
+                net_score += score
+                if self.verbose:
+                    print "  Eigenvector %d:" % i, np.round(loading, 6)
+                    print "  Eigenvalue %d: " % i, Sigma[i], "(%s%% variance explained)" % np.round(Sigma[i] / total_variance * 100, 3)
+                    print "  Score:        ", np.round(score, 6)
+                    print "  Nonconformity:", np.round(net_score, 6)
+                    print
             nc = self.nonconformity(net_score, reports_filled)
 
         # Fixed-variance threshold: eigenvalue-weighted sum of score vectors
@@ -250,11 +258,8 @@ class Oracle(object):
             net_score = np.zeros(self.num_reports)
             negative = False
             for i, var_exp in enumerate(variance_explained):
-                # net_score += Sigma[i] * wcd.dot(U.T[i])
                 loading = U.T[i]
-                if i == 0 and loading[0] < 0:
-                    negative = True
-                if negative:
+                if loading[0] < 0:
                     loading *= -1
                 score = Sigma[i] * wcd.dot(loading)
                 net_score += score
@@ -263,16 +268,15 @@ class Oracle(object):
                     print "  Eigenvalue %d: " % i, Sigma[i], "(%s%% variance explained)" % np.round(var_exp * 100, 3)
                     print "  Score:        ", np.round(score, 6)
                     print "  Nonconformity:", np.round(net_score, 6)
+                    print "  Variance explained:", var_exp, i
                     print
                 if var_exp >= self.variance_threshold: break
-            self.num_components = i
+            self.num_components = i + 1
+            if self.num_components == 0:
+                import pdb; pdb.set_trace()
+            if self.verbose:
+                print self.num_components, "components"
             nc = self.nonconformity(net_score, reports_filled)
-
-        # Sum over all events in the ballot; the ratio of this sum to
-        # the total covariance (over all events, across all reporters)
-        # is each reporter's contribution to the overall variability.
-        elif self.algorithm == "covariance":
-            nc = self.nonconformity(self.aux["cov"], reports_filled)
 
         # Sum over all events in the ballot; the ratio of this sum to
         # the total cokurtosis is that reporter's contribution.
