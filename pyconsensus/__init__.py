@@ -88,7 +88,7 @@ class Oracle(object):
         self.num_components = -1
         self.convergence = False
         self.aux = aux
-        if self.num_events <= max_components:
+        if self.num_events >= max_components:
             self.max_components = max_components
         else:
             self.max_components = self.num_events
@@ -214,6 +214,8 @@ class Oracle(object):
             nc = self.nonconformity(first_score, reports_filled)
 
         elif self.algorithm == "big-five":
+            if self.verbose:
+                print "big-five max_components: %d\n" % self.max_components
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             net_score = np.zeros(self.num_reports)
@@ -232,6 +234,8 @@ class Oracle(object):
             nc = self.nonconformity(net_score, reports_filled)
 
         elif self.algorithm == "absolute":
+            if self.verbose:
+                print "absolute max_components: %d\n" % self.max_components
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             net_score = np.zeros(self.num_reports)
