@@ -318,7 +318,9 @@ class Oracle(object):
         player_info = self.lie_detector(reports_filled)
 
         # Column Players (The Event Creators)
-        outcomes_raw = np.dot(player_info['smooth_rep'], reports_filled).squeeze()
+        outcomes_raw = np.dot(player_info['smooth_rep'], reports_filled)
+        if outcomes_raw.shape != (1,):
+            outcomes_raw = outcomes_raw.squeeze()
 
         # Discriminate Based on Contract Type
         if self.event_bounds is not None:
