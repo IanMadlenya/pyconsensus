@@ -241,8 +241,8 @@ class Oracle(object):
                 loading = U.T[i]
                 if loading[0] < 0:
                     loading *= -1
-                score = wcd.dot(loading)
-                net_score += score
+                score = Sigma[i] * wcd.dot(loading)
+                net_score += np.abs(score)
                 if self.verbose:
                     print "  Eigenvector %d:" % i, np.round(loading, 6)
                     print "  Eigenvalue %d: " % i, Sigma[i]
