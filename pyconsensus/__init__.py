@@ -327,8 +327,8 @@ class Oracle(object):
                 # Our Current best-guess for this Scaled Event (weighted median)
                 if self.event_bounds[i]["scaled"]:
                     outcomes_raw[i] = weighted_median(
-                        reports_filled[:,i].data,
-                        weights=player_info["smooth_rep"].ravel().data,
+                        reports_filled[:,i],
+                        weights=player_info["smooth_rep"].ravel(),
                     )
 
         # The Outcome (Discriminate Based on Contract Type)
