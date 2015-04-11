@@ -186,11 +186,11 @@ class Oracle(object):
         first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
         first_score = np.dot(wcd, first_loading)
 
-        if self.verbose:
-            print "Normalized eigenvectors:"
-            for i in range(len(H)):
-                print np.array(np.ma.masked_array(H[:,i] / np.sqrt(np.sum(H[:,i]**2))))
-            print
+        # if self.verbose:
+        #     print "Normalized eigenvectors:"
+        #     for i in range(len(H)):
+        #         print np.array(np.ma.masked_array(H[:,i] / np.sqrt(np.sum(H[:,i]**2))))
+        #     print
 
         return weighted_mean, wcd, covariance_matrix, first_loading, first_score
 
@@ -214,8 +214,6 @@ class Oracle(object):
             nc = self.nonconformity(first_score, reports_filled)
 
         elif self.algorithm == "big-five":
-            if self.verbose:
-                print "big-five max_components: %d\n" % self.max_components
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             U, Sigma, Vt = np.linalg.svd(covariance_matrix)
             net_score = np.zeros(self.num_reports)
