@@ -1,18 +1,10 @@
 pyconsensus
 ===========
 
-.. image:: https://travis-ci.org/AugurProject/pyconsensus.svg?branch=master
-    :target: https://travis-ci.org/AugurProject/pyconsensus
-
-.. image:: https://coveralls.io/repos/AugurProject/pyconsensus/badge.png
-  :target: https://coveralls.io/r/AugurProject/pyconsensus
-
 .. image:: https://badge.fury.io/py/pyconsensus.svg
     :target: http://badge.fury.io/py/pyconsensus
 
 Python implementation of the Augur consensus mechanism, which is a modified version of Sztorc consensus (https://github.com/psztorc/Truthcoin).  Mathematical details can be found in the Augur whitepaper at http://augur.link/augur.pdf.
-
-Donations: 14sqtQRWuWqa7SCtS1iSjt1FexSxfwnw7G
 
 Installation
 ^^^^^^^^^^^^
@@ -52,6 +44,4 @@ To use pyconsensus, import the Oracle class:
 Tests
 ^^^^^
 
-Unit tests are in the test/ directory.  Julia simulations are in the sim/ directory::
-
-    $ julia sim/runsim.jl
+Unit tests are in the test/ directory.
