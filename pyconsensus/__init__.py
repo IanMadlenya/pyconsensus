@@ -35,13 +35,13 @@ import os
 import getopt
 import json
 import warnings
+from collections import Counter
 from pprint import pprint
 from copy import deepcopy
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as p
-from sklearn.decomposition import FastICA
-from sklearn import svm
+from scipy import cluster
 from scipy.cluster.vq import kmeans, kmeans2, whiten, vq
 from weightedstats import weighted_median
 from six.moves import xrange as range
@@ -203,6 +203,8 @@ class Oracle(object):
         """
         first_loading = np.ma.masked_array(np.zeros(self.num_events))
         first_score = np.ma.masked_array(np.zeros(self.num_reports))
+        scores = np.zeros(self.num_reports)
+        nc = np.zeros(self.num_reports)
 
         if self.verbose:
             print "pyconsensus [%s]:\n" % self.algorithm
@@ -211,6 +213,7 @@ class Oracle(object):
         if self.algorithm == "sztorc":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             nc = self.nonconformity(first_score, reports_filled)
+            scores = first_score
 
         elif self.algorithm == "big-five":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
@@ -229,13 +232,31 @@ class Oracle(object):
                     print "  Nonconformity:", np.round(net_score, 6)
                     print
             nc = self.nonconformity(net_score, reports_filled)
+            scores = net_score
+
+        elif self.algorithm == "clustering":
+            reports = cluster.vq.whiten(reports_filled)
+            num_clusters = int(np.ceil(np.sqrt(len(reports))))
+            centroids,_ = cluster.vq.kmeans(reports, num_clusters)
+            clustered,_ = cluster.vq.vq(reports, centroids)
+            counts = Counter(list(clustered)).most_common()
+            new_rep = {}
+            for i, c in enumerate(counts):
+                new_rep[c[0]] = c[1]
+            df = pd.DataFrame(reports)
+            labels = []
+            new_rep_list = []
+            for c in clustered:
+                new_rep_list.append(new_rep[c])
+            nc = np.array(new_rep_list) / sum(new_rep_list)
 
         elif self.algorithm == "absolute":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-            # Joey's mod
-            nc = self.normalize(np.abs(first_score) - np.max(first_score))
-            # Jack's old mod
-            # nc = self.normalize(1 / first_score)
+            # V's mod
+            mean = np.mean(first_score)
+            distance = np.abs((first_score - mean))
+            nc = 1 / np.square(1 + distance)
+            scores = first_score
 
         # Fixed-variance threshold: eigenvalue-weighted sum of score vectors
         elif self.algorithm == "fixed-variance":
@@ -260,14 +281,15 @@ class Oracle(object):
                 if var_exp >= self.variance_threshold: break
             self.num_components = i + 1
             nc = self.nonconformity(net_score, reports_filled)
+            scores = net_score
 
         # Sum over all events in the ballot; the ratio of this sum to
         # the total cokurtosis is that reporter's contribution.
         elif self.algorithm == "cokurtosis":
             nc = self.nonconformity(self.aux["cokurt"], reports_filled)
+            scores = self.aux["cokurt"]
 
         # Use adjusted nonconformity scores to update Reputation fractions
-        # if self.algorithm != "absolute":
         this_rep = self.normalize(
             nc * (self.reputation / np.mean(self.reputation)).T
         )
@@ -277,6 +299,7 @@ class Oracle(object):
             print
         return {
             "first_loading": first_loading,
+            "scores": scores,
             "old_rep": self.reputation.T,
             "this_rep": this_rep,
             "smooth_rep": self.alpha*this_rep + (1-self.alpha)*self.reputation.T,
@@ -375,7 +398,8 @@ class Oracle(object):
                 'participation_rows': participation_rows.data.tolist(),
                 'relative_part': na_bonus_reporters.data.tolist(),
                 'reporter_bonus': reporter_bonus.data.tolist(),
-                },
+                'scores': player_info['scores'],
+            },
             'events': {
                 'adj_first_loadings': player_info['first_loading'].data.tolist(),
                 'outcomes_raw': outcomes_raw.data.tolist(),
@@ -386,7 +410,7 @@ class Oracle(object):
                 'author_bonus': author_bonus.data.tolist(),
                 'outcomes_adjusted': outcomes_adj,
                 'outcomes_final': outcomes_final,
-                },
+            },
             'participation': 1 - percent_na,
             'avg_certainty': avg_certainty,
             'convergence': self.convergence,
@@ -409,33 +433,26 @@ def main(argv=None):
             print(__doc__)
             return 0
         elif opt in ('-t', '--test'):
+            testalgo = "clustering"
             if arg == "1":
-                reports = np.array([[ 2.0, 2.0, 1.0, 1.0 ],
-                                    [ 2.0, 1.0, 1.0, 1.0 ],
-                                    [ 2.0, 2.0, 1.0, 1.0 ],
-                                    [ 2.0, 2.0, 2.0, 1.0 ],
-                                    [ 1.0, 1.0, 2.0, 2.0 ],
-                                    [ 1.0, 1.0, 2.0, 2.0 ]])
-                oracle = Oracle(reports=reports, algorithm="absolute")
-                A = oracle.consensus()
-                print(pd.DataFrame(A["events"]))
-                print(pd.DataFrame(A["agents"]))
+                reports = np.array([[ YES, YES,  NO,  NO ],
+                                    [ YES,  NO,  NO,  NO ],
+                                    [ YES, YES,  NO,  NO ],
+                                    [ YES, YES, YES,  NO ],
+                                    [  NO,  NO, YES, YES ],
+                                    [  NO,  NO, YES, YES ]])
             elif arg == "2":
-                reports = np.array([[ 2.0, 2.0, 1.0, 1.0 ],
-                                    [ 2.0, 2.0, 1.0, 1.0 ],
-                                    [ 2.0, 2.0, 1.0, 1.0 ],
-                                    [ 2.0, 2.0, 1.0, 1.0 ],
-                                    [ 2.0, 2.0, 1.0, 1.0 ],
-                                    [ 2.0, 2.0, 1.0, 1.0 ],
-                                    [ 2.0, 2.0, 2.0, 1.0 ],
-                                    [ 2.0, 2.0, 2.0, 1.0 ],
-                                    [ 2.0, 2.0, 2.0, 1.0 ],
-                                    [ 2.0, 2.0, 2.0, 1.0 ],
-                                    [ 2.0, 2.0, 2.0, 1.0 ]])
-                oracle = Oracle(reports=reports, algorithm="absolute")
-                A = oracle.consensus()
-                print(pd.DataFrame(A["events"]))
-                print(pd.DataFrame(A["agents"]))
+                reports = np.array([[ YES, YES,  NO,  NO ],
+                                    [ YES, YES,  NO,  NO ],
+                                    [ YES, YES,  NO,  NO ],
+                                    [ YES, YES,  NO,  NO ],
+                                    [ YES, YES,  NO,  NO ],
+                                    [ YES, YES,  NO,  NO ],
+                                    [ YES, YES, YES,  NO ],
+                                    [ YES, YES, YES,  NO ],
+                                    [ YES, YES, YES,  NO ],
+                                    [ YES, YES, YES,  NO ],
+                                    [ YES, YES, YES,  NO ]])
             elif arg == "3":
                 reports =  np.array([[ YES,  YES,   NO,  NO,  YES,  YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
                                      [ YES,  YES,   NO,  NO,  YES,  YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
@@ -450,11 +467,6 @@ def main(argv=None):
                                      [ YES,  YES,  YES,  NO,  YES,  YES,  YES,  NO,  YES,  YES,  YES,   NO,  YES],
                                      [ YES,  YES,  YES,  NO,  YES,  YES,  YES,  NO,  YES,  YES,  YES,   NO,  YES],
                                      [ YES,  YES,  YES,  NO,  YES,  YES,  YES,  NO,  YES,  YES,  YES,   NO,  YES]])
-                oracle = Oracle(reports=reports, algorithm="absolute")
-                A = oracle.consensus()
-                print(pd.DataFrame(A["events"]))
-                print(pd.DataFrame(A["agents"]))
-
             elif arg == "4":
                 reports =  np.array([[ YES,  YES,   NO,   NO,  YES ],
                                      [ YES,  YES,   NO,   NO,  YES ],
@@ -481,10 +493,54 @@ def main(argv=None):
                                      [ YES,  YES,   NO,   NO,  YES ],
                                      [ YES,  YES,   NO,   NO,  YES ],
                                      [ YES,  YES,   NO,   NO,  YES ]])
-                oracle = Oracle(reports=reports, algorithm="absolute")
-                A = oracle.consensus()
-                print(pd.DataFrame(A["events"]))
-                print(pd.DataFrame(A["agents"]))
+
+            elif arg == "5":
+                reports = np.array([[ BAD,  NO,  NO, YES,  NO,  NO, YES, YES, BAD, BAD ],
+                                    [ BAD, BAD,  NO, BAD, BAD, YES, YES, BAD, YES, BAD ],
+                                    [  NO, YES, BAD, BAD,  NO, YES,  NO,  NO, BAD, BAD ],
+                                    [ BAD, BAD, BAD, BAD, BAD,  NO,  NO,  NO, BAD, YES ],
+                                    [  NO, YES, YES, BAD, BAD, YES, BAD, YES, BAD, YES ],
+                                    [  NO, YES, YES, YES,  NO, BAD,  NO, BAD, BAD, BAD ],
+                                    [  NO,  NO,  NO, YES,  NO,  NO,  NO, YES, BAD, YES ],
+                                    [ BAD, BAD, BAD, YES, BAD, YES, BAD, BAD, YES,  NO ],
+                                    [ BAD, BAD, BAD,  NO, BAD, YES, YES,  NO,  NO, BAD ],
+                                    [ BAD, YES, BAD, YES,  NO,  NO, YES, YES,  NO, BAD ],
+                                    [ YES, YES, BAD, BAD, BAD, YES, BAD, BAD, YES, YES ],
+                                    [ YES, BAD, YES,  NO, YES, BAD, YES,  NO, YES, BAD ],
+                                    [  NO,  NO,  NO, YES, YES, YES, BAD, YES, BAD,  NO ],
+                                    [  NO,  NO,  NO, YES, YES, YES, BAD, YES, BAD,  NO ],
+                                    [  NO,  NO,  NO, YES, YES, YES, BAD, YES, BAD,  NO ],
+                                    [  NO,  NO,  NO, YES, YES, YES, BAD, YES, BAD,  NO ],
+                                    [  NO,  NO,  NO, YES, YES, YES, BAD, YES, BAD,  NO ],
+                                    [  NO,  NO,  NO, YES, YES, YES, BAD, YES, BAD,  NO ],
+                                    [  NO,  NO,  NO, YES, YES, YES, BAD, YES, BAD,  NO ],
+                                    [ BAD, BAD, BAD, YES, BAD, YES, BAD, BAD, YES,  NO ]])
+            elif arg == "6":
+                reports = np.array([[  NO,   NO,  YES,  YES,   NO,  YES,   NO,   NO,   NO,   NO ],
+                                    [ YES,  YES,   NO,   NO,   NO,  YES,  YES,  YES,   NO,  YES ],
+                                    [ YES,  YES,   NO,  YES,   NO,  YES,  YES,   NO,  YES,  YES ],
+                                    [  NO,  YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,  YES ],
+                                    [  NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,   NO,   NO ],
+                                    [  NO,  YES,   NO,   NO,   NO,  YES,  YES,   NO,  YES,  YES ],
+                                    [ YES,   NO,   NO,  YES,  YES,   NO,  YES,   NO,   NO,   NO ],
+                                    [ YES,  YES,   NO,   NO,  YES,   NO,  YES,  YES,  YES,   NO ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [  NO,  YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,  YES ]])
+            oracle = Oracle(reports=reports, algorithm=testalgo)
+            A = oracle.consensus()
+            print(reports)
+            # print(pd.DataFrame(A["events"]))
+            print(pd.DataFrame(A["agents"]))
 
         elif opt in ('-x', '--example'):
             reports = np.array([[ YES, YES,  NO,  NO],
