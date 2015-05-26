@@ -235,7 +235,8 @@ class Oracle(object):
             scores = net_score
 
         elif self.algorithm == "clustering":
-            reports = cluster.vq.whiten(reports_filled)
+            weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
+            reports = cluster.vq.whiten(wcd)
             num_clusters = int(np.ceil(np.sqrt(len(reports))))
             centroids,_ = cluster.vq.kmeans(reports, num_clusters)
             clustered,_ = cluster.vq.vq(reports, centroids)
@@ -243,8 +244,6 @@ class Oracle(object):
             new_rep = {}
             for i, c in enumerate(counts):
                 new_rep[c[0]] = c[1]
-            df = pd.DataFrame(reports)
-            labels = []
             new_rep_list = []
             for c in clustered:
                 new_rep_list.append(new_rep[c])
