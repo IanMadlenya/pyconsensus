@@ -237,8 +237,8 @@ class Oracle(object):
         elif self.algorithm == "k-means":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             reports = cluster.vq.whiten(wcd)
-            # num_clusters = int(np.ceil(np.sqrt(len(reports))))
-            num_clusters = 4
+            num_clusters = int(np.ceil(np.sqrt(len(reports))))
+            # num_clusters = 4
             centroids,_ = cluster.vq.kmeans(reports, num_clusters)
             clustered,_ = cluster.vq.vq(reports, centroids)
             counts = Counter(list(clustered)).most_common()
