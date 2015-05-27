@@ -40,9 +40,8 @@ from pprint import pprint
 from copy import deepcopy
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as p
+# from matplotlib import pyplot as plt
 from scipy import cluster
-from scipy.cluster.vq import kmeans, kmeans2, whiten, vq
 from weightedstats import weighted_median
 from six.moves import xrange as range
 
@@ -68,7 +67,7 @@ class Oracle(object):
     def __init__(self, reports=None, event_bounds=None, reputation=None,
                  catch_tolerance=0.1, alpha=0.1, verbose=False,
                  aux=None, algorithm="fixed-variance", variance_threshold=0.9,
-                 max_components=5):
+                 max_components=5, hierarchy_threshold=0.5):
         """
         Args:
           reports (list-of-lists): reports matrix; rows = reporters, columns = Events.
@@ -94,6 +93,7 @@ class Oracle(object):
         self.algorithm = algorithm
         self.variance_threshold = variance_threshold
         self.num_components = -1
+        self.hierarchy_threshold = hierarchy_threshold
         self.convergence = False
         self.aux = aux
         if self.num_events >= max_components:
@@ -210,7 +210,7 @@ class Oracle(object):
             print "pyconsensus [%s]:\n" % self.algorithm
 
         # Use the largest eigenvector only
-        if self.algorithm == "sztorc":
+        if self.algorithm == "PCA":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             nc = self.nonconformity(first_score, reports_filled)
             scores = first_score
@@ -234,10 +234,11 @@ class Oracle(object):
             nc = self.nonconformity(net_score, reports_filled)
             scores = net_score
 
-        elif self.algorithm == "clustering":
+        elif self.algorithm == "k-means":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             reports = cluster.vq.whiten(wcd)
-            num_clusters = int(np.ceil(np.sqrt(len(reports))))
+            # num_clusters = int(np.ceil(np.sqrt(len(reports))))
+            num_clusters = 4
             centroids,_ = cluster.vq.kmeans(reports, num_clusters)
             clustered,_ = cluster.vq.vq(reports, centroids)
             counts = Counter(list(clustered)).most_common()
@@ -247,11 +248,24 @@ class Oracle(object):
             new_rep_list = []
             for c in clustered:
                 new_rep_list.append(new_rep[c])
-            nc = np.array(new_rep_list) / sum(new_rep_list)
+            new_rep_list = np.array(new_rep_list) - min(new_rep_list)
+            nc = new_rep_list / sum(new_rep_list)
+
+        elif self.algorithm == "hierarchy":
+            weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
+            clustered = cluster.hierarchy.fclusterdata(wcd, self.hierarchy_threshold, criterion='distance')
+            counts = Counter(list(clustered)).most_common()
+            new_rep = {}
+            for i, c in enumerate(counts):
+                new_rep[c[0]] = c[1]
+            new_rep_list = []
+            for c in clustered:
+                new_rep_list.append(new_rep[c])
+            new_rep_list = np.array(new_rep_list) - min(new_rep_list)
+            nc = new_rep_list / sum(new_rep_list)
 
         elif self.algorithm == "absolute":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-            # V's mod
             mean = np.mean(first_score)
             distance = np.abs((first_score - mean))
             nc = 1 / np.square(1 + distance)
@@ -432,7 +446,7 @@ def main(argv=None):
             print(__doc__)
             return 0
         elif opt in ('-t', '--test'):
-            testalgo = "clustering"
+            testalgo = "hierarchy"
             if arg == "1":
                 reports = np.array([[ YES, YES,  NO,  NO ],
                                     [ YES,  NO,  NO,  NO ],
@@ -565,7 +579,7 @@ def main(argv=None):
             reputation = [2, 10, 4, 2, 7, 1]
             oracle = Oracle(reports=reports,
                             reputation=reputation,
-                            algorithm="sztorc")
+                            algorithm="PCA")
             A = oracle.consensus()
             print(pd.DataFrame(A["events"]))
             print(pd.DataFrame(A["agents"]))
