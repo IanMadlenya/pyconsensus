@@ -186,6 +186,7 @@ class Oracle(object):
             H = np.linalg.svd(covariance_matrix)[0]
         except Exception as exc:
             print exc
+            H = np.zeros(self.num_reports, self.num_events)
 
         # Normalize loading by Euclidean distance
         first_loading = np.ma.masked_array(H[:,0] / np.sqrt(np.sum(H[:,0]**2)))
