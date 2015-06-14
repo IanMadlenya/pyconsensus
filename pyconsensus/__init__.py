@@ -171,8 +171,9 @@ class Oracle(object):
                     active_reputation = np.zeros(num_present[i])
                     active_reports = np.zeros(num_present[i])
                     active_index = 0
-                    nan_indices = np.zeros(self.num_events) + self.num_reports
+                    nan_indices = np.zeros(self.num_reports) + self.num_reports
                     for j in range(self.num_reports):
+                        print "row", j, "col", i
                         if reports_copy[j,i] != NA and not np.isnan(reports_copy[j,i]):
                             total_active_reputation += self.reputation[j]
                             active_reputation[active_index] = self.reputation[j]
@@ -180,10 +181,6 @@ class Oracle(object):
                             active_index += 1
                         else:
                             nan_indices[j] = j
-                    print "Total active reputation:", total_active_reputation
-                    print "Active reputation:", active_reputation
-                    print "Active reports:   ", active_reports
-                    print
                     if self.event_bounds is not None and self.event_bounds[i] is not None and self.event_bounds[i]["scaled"]:
                         for j in range(num_present[i]):
                             active_reputation[j] /= total_active_reputation
@@ -194,7 +191,7 @@ class Oracle(object):
                             active_reputation[j] /= total_active_reputation
                             guess += active_reputation[j] * active_reports[j]
                         guess = self.catch(guess)
-                    for j in range(self.num_events):
+                    for j in range(self.num_reports):
                         if nan_indices[j] < self.num_reports:
                             reports_copy[nan_indices[j],i] = guess
         return reports_copy
