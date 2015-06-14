@@ -62,11 +62,24 @@ YES = 2.0
 BAD = 1.5
 NA = 0.0
 
+def fold(arr, num_cols):
+    folded = []
+    num_rows = len(arr) / float(num_cols)
+    if num_rows != int(num_rows):
+        raise Exception("array length (%i) not divisible by %i" % (len(arr), num_cols))
+    num_rows = int(num_rows)
+    for i in range(num_rows):
+        row = []
+        for j in range(num_cols):
+            row.append(arr[i*num_cols + j])
+        folded.append(row)
+    return folded
+
 class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
                  catch_tolerance=0.1, alpha=0.1, verbose=False,
-                 aux=None, algorithm="fixed-variance", variance_threshold=0.9,
+                 aux=None, algorithm="PCA", variance_threshold=0.9,
                  max_components=5, hierarchy_threshold=0.5):
         """
         Args:
@@ -139,34 +152,52 @@ class Oracle(object):
                     reports[:,i] = (reports[:,i] - self.event_bounds[i]["min"]) / float(self.event_bounds[i]["max"] - self.event_bounds[i]["min"])
 
         # Interpolation to fill the missing observations
-        for j in range(self.num_events):
-            if reports[:,j].mask.any():
-                total_active_reputation = 0
-                active_reputation = []
-                active_reports = []
-                nan_indices = []
-                num_present = 0
-                for i in range(self.num_reports):
-                    if reports[i,j] != np.nan:
-                        total_active_reputation += self.reputation[i]
-                        active_reputation.append(self.reputation[i])
-                        active_reports.append(reports[i,j])
-                        num_present += 1
-                    else:
-                        nan_indices.append(i)
-                if not self.event_bounds[j]["scaled"]:
-                    guess = 0
-                    for i in range(num_present):
-                        active_reputation[i] /= total_active_reputation
-                        guess += active_reputation[i] * active_reports[i]
-                    guess = self.catch(guess)
+        reports_mask = np.zeros([self.num_reports, self.num_events])
+        missing_values = 0
+        reports = np.array(reports)
+        num_present = np.zeros(self.num_events).astype(int)
+        for i in range(self.num_events):
+            for j in range(self.num_reports):
+                if reports[j,i] == NA or np.isnan(reports[j,i]):
+                    reports_mask[j,i] = 1
+                    missing_values += 1
                 else:
-                    for i in range(num_present):
-                        active_reputation[i] /= total_active_reputation
-                    guess = weighted_median(active_reports, weights=active_reputation)
-                for nan_index in nan_indices:
-                    reports[nan_index,j] = guess
-        return reports
+                    num_present[i] += 1
+        reports_copy = np.copy(reports)
+        if missing_values > 0:
+            for i in range(self.num_events):
+                if num_present[i] < self.num_reports:
+                    total_active_reputation = 0
+                    active_reputation = np.zeros(num_present[i])
+                    active_reports = np.zeros(num_present[i])
+                    active_index = 0
+                    nan_indices = np.zeros(self.num_events) + self.num_reports
+                    for j in range(self.num_reports):
+                        if reports_copy[j,i] != NA and not np.isnan(reports_copy[j,i]):
+                            total_active_reputation += self.reputation[j]
+                            active_reputation[active_index] = self.reputation[j]
+                            active_reports[active_index] = reports_copy[j,i]
+                            active_index += 1
+                        else:
+                            nan_indices[j] = j
+                    print "Total active reputation:", total_active_reputation
+                    print "Active reputation:", active_reputation
+                    print "Active reports:   ", active_reports
+                    print
+                    if self.event_bounds is not None and self.event_bounds[i] is not None and self.event_bounds[i]["scaled"]:
+                        for j in range(num_present[i]):
+                            active_reputation[j] /= total_active_reputation
+                        guess = weighted_median(active_reports, weights=active_reputation)
+                    else:
+                        guess = 0
+                        for j in range(num_present[i]):
+                            active_reputation[j] /= total_active_reputation
+                            guess += active_reputation[j] * active_reports[j]
+                        guess = self.catch(guess)
+                    for j in range(self.num_events):
+                        if nan_indices[j] < self.num_reports:
+                            reports_copy[nan_indices[j],i] = guess
+        return reports_copy
 
     def wpca(self, reports_filled):
         # Compute the weighted mean (of all reporters) for each event
@@ -239,7 +270,6 @@ class Oracle(object):
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             reports = cluster.vq.whiten(wcd)
             num_clusters = int(np.ceil(np.sqrt(len(reports))))
-            # num_clusters = 4
             centroids,_ = cluster.vq.kmeans(reports, num_clusters)
             clustered,_ = cluster.vq.vq(reports, centroids)
             counts = Counter(list(clustered)).most_common()
@@ -251,6 +281,7 @@ class Oracle(object):
                 new_rep_list.append(new_rep[c])
             new_rep_list = np.array(new_rep_list) - min(new_rep_list)
             nc = new_rep_list / sum(new_rep_list)
+            self.convergence = True
 
         elif self.algorithm == "hierarchy":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
@@ -264,6 +295,7 @@ class Oracle(object):
                 new_rep_list.append(new_rep[c])
             new_rep_list = np.array(new_rep_list) - min(new_rep_list)
             nc = new_rep_list / sum(new_rep_list)
+            self.convergence = True
 
         elif self.algorithm == "absolute":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
@@ -379,7 +411,12 @@ class Oracle(object):
 
         # Participation: information about missing values
         na_mat = self.reports * 0
-        na_mat[na_mat.mask] = 1  # indicator matrix for missing
+        na_mat[np.isnan(self.reports)] = 1  # indicator matrix for missing
+        na_mat[self.reports == NA] = 1
+        if self.verbose:
+            print "NA Mat:"
+            print na_mat
+            print
 
         # Participation Within Events (Columns)
         # % of reputation that answered each Event
@@ -387,10 +424,16 @@ class Oracle(object):
 
         # Participation Within Agents (Rows)
         # Democracy Option - all Events treated equally.
+        if self.verbose:
+            print "Sum:"
+            print na_mat.sum(axis=1)
+            print
         participation_rows = 1 - na_mat.sum(axis=1) / na_mat.shape[1]
 
         # General Participation
         percent_na = 1 - np.mean(participation_columns)
+        if self.verbose:
+            print percent_na
 
         # Combine Information
         # Row
@@ -416,7 +459,7 @@ class Oracle(object):
             },
             'events': {
                 'adj_first_loadings': player_info['first_loading'].data.tolist(),
-                'outcomes_raw': outcomes_raw.data.tolist(),
+                'outcomes_raw': outcomes_raw.tolist(),
                 'consensus_reward': consensus_reward,
                 'certainty': certainty,
                 'NAs Filled': na_mat.sum(axis=0).data.tolist(),
@@ -447,7 +490,7 @@ def main(argv=None):
             print(__doc__)
             return 0
         elif opt in ('-t', '--test'):
-            testalgo = "hierarchy"
+            testalgo = "PCA"
             if arg == "1":
                 reports = np.array([[ YES, YES,  NO,  NO ],
                                     [ YES,  NO,  NO,  NO ],
@@ -550,10 +593,38 @@ def main(argv=None):
                                     [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
                                     [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
                                     [  NO,  YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,  YES ]])
+            elif arg == "7":
+                reports = np.array([[ YES, YES, YES, YES, YES, YES ],
+                                    [ YES, YES, YES,  NO,  NO,  NO ],
+                                    [  NA,  NA,  NA,  NA,  NA,  NA ]])
+                                    # [ np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]])
+            elif arg == "8":
+                reports = np.array([[ YES, YES, YES, YES, YES, YES ],
+                                    [ YES, YES, YES,  NO,  NA,  NA ],
+                                    [ YES, YES, YES,  NA,  NA,  NO ]])
+            elif arg == "9":
+                reports = np.array([[ YES, YES, YES, YES, YES, YES ],
+                                    [ YES, YES, YES,  NO,  NA,  NA ],
+                                    [ YES, YES, YES,  NO,  NA,  NA ]])
+            elif arg == "10":
+                reports = np.array([[ YES, YES, YES,  NO, YES, YES ],
+                                    [ YES, YES, YES,  NO,  NA,  NA ],
+                                    [ YES, YES, YES,  NO,  NA,  NA ]])
+            elif arg == "11":
+                reports = np.array([[ YES, YES, YES, YES, YES, YES ],
+                                    [  NA,  NA,  NA,  NA,  NA,  NA ],
+                                    [ YES, YES, YES,  NO,  NO,  NO ]])
+            elif arg == "12":
+                reports = np.array([[ YES, YES, YES,  NO,  NO,  NO ],
+                                    [ YES, YES, YES,  NO,  NO,  NO ],
+                                    [ YES, YES, YES,  NO,  NO,  NO ]])
+            elif arg == "13":
+                reports = np.array([[ YES, YES, YES,  NO,  NO,  NO ]])
             oracle = Oracle(reports=reports, algorithm=testalgo)
             A = oracle.consensus()
             print(reports)
-            # print(pd.DataFrame(A["events"]))
+            print(pd.DataFrame(A["events"]))
+            print
             print(pd.DataFrame(A["agents"]))
 
         elif opt in ('-x', '--example'):
@@ -571,11 +642,11 @@ def main(argv=None):
             print(pd.DataFrame(A["events"]))
             print(pd.DataFrame(A["agents"]))
         elif opt in ('-m', '--missing'):
-            reports = np.array([[    YES, YES,  NO, np.nan],
+            reports = np.array([[    YES, YES,  NO,     NA],
                                 [    YES,  NO,  NO,     NO],
                                 [    YES, YES,  NO,     NO],
                                 [    YES, YES, YES,     NO],
-                                [ np.nan,  NO, YES,    YES],
+                                [     NA,  NO, YES,    YES],
                                 [     NO,  NO, YES,    YES]])
             reputation = [2, 10, 4, 2, 7, 1]
             oracle = Oracle(reports=reports,
@@ -586,9 +657,9 @@ def main(argv=None):
             print(pd.DataFrame(A["agents"]))
         elif opt in ('-s', '--scaled'):
             reports = np.array([[ YES, YES,  NO,  NO, 233, 16027.59],
-                                [ YES,  NO,  NO,  NO, 199,   np.nan],
+                                [ YES,  NO,  NO,  NO, 199,      NA ],
                                 [ YES, YES,  NO,  NO, 233, 16027.59],
-                                [ YES, YES, YES,  NO, 250,   np.nan],
+                                [ YES, YES, YES,  NO, 250,      NA ],
                                 [  NO,  NO, YES, YES, 435,  8001.00],
                                 [  NO,  NO, YES, YES, 435, 19999.00]])
             event_bounds = [
