@@ -280,7 +280,7 @@ class Oracle(object):
             nc = new_rep_list / sum(new_rep_list)
             self.convergence = True
 
-        elif self.algorithm == "hierarchy":
+        elif self.algorithm == "hierarchical":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             clustered = cluster.hierarchy.fclusterdata(wcd, self.hierarchy_threshold, criterion='distance')
             counts = Counter(list(clustered)).most_common()
@@ -617,6 +617,89 @@ def main(argv=None):
                                     [ YES, YES, YES,  NO,  NO,  NO ]])
             elif arg == "13":
                 reports = np.array([[ YES, YES, YES,  NO,  NO,  NO ]])
+            elif arg == "14":
+                reports = np.array([[ YES, YES,  NO,  NO ],
+                                    [ YES, YES,  NO,  NO ],
+                                    [ YES, YES,  NO,  NO ],
+                                    [ YES, YES,  NO,  NO ],
+                                    [ YES, YES,  NO,  NO ],
+                                    [ YES, YES,  NO,  NO ],
+                                    [ YES, YES, YES,  NO ],
+                                    [ YES, YES, YES,  NO ],
+                                    [ YES, YES, YES,  NO ],
+                                    [ YES, YES, YES,  NO ],
+                                    [ YES, YES, YES,  NO ]])
+            elif arg == "15":
+                reports =  np.array([[ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [  NO,   NO,   NO,  YES,   NO ],
+                                     [ YES,  YES,  YES,   NO,  YES ],
+                                     [ YES,  YES,  YES,   NO,  YES ],
+                                     [ YES,  YES,  YES,   NO,  YES ],
+                                     [ YES,  YES,  YES,   NO,  YES ],
+                                     [ YES,  YES,  YES,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ],
+                                     [ YES,  YES,   NO,   NO,  YES ]])
+            elif arg == "16":
+                reports = np.array([[  NO,   NO,  YES,  YES,   NO,  YES,   NO,   NO,   NO,   NO ],
+                                    [ YES,  YES,   NO,   NO,   NO,  YES,  YES,  YES,   NO,  YES ],
+                                    [ YES,  YES,   NO,  YES,   NO,  YES,  YES,   NO,  YES,  YES ],
+                                    [  NO,  YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,  YES ],
+                                    [  NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,   NO,   NO ],
+                                    [  NO,  YES,   NO,   NO,   NO,  YES,  YES,   NO,  YES,  YES ],
+                                    [ YES,   NO,   NO,  YES,  YES,   NO,  YES,   NO,   NO,   NO ],
+                                    [ YES,  YES,   NO,   NO,  YES,   NO,  YES,  YES,  YES,   NO ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
+                                    [  NO,  YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,  YES ]])
+            elif arg == "17":
+                reports = np.array([[ YES, YES,  NO,  NO ],
+                                    [ YES,  NO,  NO,  NO ],
+                                    [ YES, YES,  NO,  NO ],
+                                    [ YES, YES, YES,  NO ],
+                                    [  NO,  NO, YES, YES ],
+                                    [  NO,  NO, YES, YES ]])
+            elif arg == "18":
+                reports = np.array([[ YES, YES,  NO,  NO ],
+                                    [ YES,  NO,  NO,  NO ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ],
+                                    [  NA,  NA,  NA,  NA ]])
             oracle = Oracle(reports=reports, algorithm=testalgo)
             A = oracle.consensus()
             print(reports)
