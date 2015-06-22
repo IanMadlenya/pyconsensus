@@ -77,6 +77,18 @@ def fold(arr, num_cols):
         folded.append(row)
     return folded
 
+class clusternode:
+    def __init__(self,vec,numItems=0,meanVec=None,rep=0,repVec=None, reporterIndexVec=None, dist=-1):
+        # num of events would be == len(vec[i])
+        self.vec=vec
+        #numitems is num reporters in this cluster
+        self.numItems=numItems
+        self.meanVec=meanVec
+        self.rep=rep
+        self.repVec=repVec
+        self.reporterIndexVec = reporterIndexVec
+        self.dist = dist
+
 class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
@@ -118,25 +130,13 @@ class Oracle(object):
         if reputation is None:
             self.weighted = False
             self.total_rep = self.num_reports
-            self.reptokens = np.ones(self.num_reports).astype(int)
             self.reputation = np.array([1 / float(self.num_reports)] * self.num_reports)
         else:
             self.weighted = True
             self.total_rep = sum(np.array(reputation).ravel())
-            self.reptokens = np.array(reputation).ravel().astype(int)
             self.reputation = np.array([i / float(self.total_rep) for i in reputation])
+        self.reptokens = [int(r * 1e6) for r in self.reputation]
 
-    class clusternode:
-        def __init__(self,vec,numItems=0,meanVec=None,rep=0,repVec=None, reporterIndexVec=None, dist=-1):
-            # num of events would be == len(vec[i])
-            self.vec=vec
-            #numitems is num reporters in this cluster
-            self.numItems=numItems
-            self.meanVec=meanVec
-            self.rep=rep
-            self.repVec=repVec
-            self.reporterIndexVec = reporterIndexVec
-            self.dist = dist
     def L2dist(self,v1,v2):
         return sqrt(sum((v1-v2)**2))
 
@@ -158,7 +158,6 @@ class Oracle(object):
                 mode = clusters[i]
         for x in range(len(clusters)):
             clusters[x].dist = self.L2dist(mode.meanVec,clusters[x].meanVec)
-
         distMatrix = zeros([numReporters, 1]).astype(float)
         for x in range(len(clusters)):
             for i in range(clusters[x].numItems):
@@ -192,7 +191,7 @@ class Oracle(object):
                 cmax.meanVec = array(self.newMean(cmax))
                 cmax.reporterIndexVec += [i]
             else:
-                clusters.append(self.clusternode(array([features[i]]), 1, features[i], rep[i], array(rep[i]), [i]))
+                clusters.append(clusternode(array([features[i]]), 1, features[i], rep[i], array(rep[i]), [i]))
         clusters = self.process(clusters, len(features))
         return clusters
 
@@ -301,6 +300,16 @@ class Oracle(object):
         The reports matrix has reporters as rows and events as columns.
 
         """
+        if self.verbose:
+            print "Reports:"
+            print self.reports
+            print "Total rep:"
+            print self.total_rep
+            print "Num reporters:"
+            print self.num_reports
+            print "Rep tokens:"
+            print self.reptokens
+
         first_loading = np.ma.masked_array(np.zeros(self.num_events))
         first_score = np.ma.masked_array(np.zeros(self.num_reports))
         scores = np.zeros(self.num_reports)
@@ -377,8 +386,9 @@ class Oracle(object):
                 print self.reports
                 print "reports filled:"
                 print reports_filled
-                print "reputation:"
+                print "reputation fraction:"
                 print self.reputation
+                print "rep tokens:"
                 print self.reptokens
 
         elif self.algorithm == "absolute":
