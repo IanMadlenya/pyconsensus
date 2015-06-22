@@ -146,7 +146,7 @@ class Oracle(object):
             weighted[i,:] = cmax.vec[i]*cmax.repVec[i]
         x = sum(weighted, axis=0)
         mean = [y / cmax.rep for y in x]
-        logging.warning(mean)
+        # logging.warning(mean)
         return(mean)
 
     def process(self, clusters, numReporters):
@@ -364,12 +364,13 @@ class Oracle(object):
                 new_rep_list.append(new_rep[c])
             new_rep_list = np.array(new_rep_list) - min(new_rep_list)
             nc = new_rep_list / sum(new_rep_list)
-            logging.warning(nc)
+            # logging.warning(nc)
             self.convergence = True
 
         elif self.algorithm == "clusterfeck":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             nc = self.cluster(reports_filled, self.reptokens)
+            self.convergence = True
 
         elif self.algorithm == "absolute":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
@@ -564,7 +565,7 @@ def main(argv=None):
             print(__doc__)
             return 0
         elif opt in ('-t', '--test'):
-            testalgo = "PCA"
+            testalgo = "clusterfeck"
             if arg == "1":
                 reports = np.array([[ YES, YES,  NO,  NO ],
                                     [ YES,  NO,  NO,  NO ],
