@@ -44,6 +44,8 @@ import pandas as pd
 from scipy import cluster
 from weightedstats import weighted_median
 from six.moves import xrange as range
+from numpy import *
+import logging
 
 __title__      = "pyconsensus"
 __version__    = "0.5.7"
@@ -123,6 +125,76 @@ class Oracle(object):
             self.total_rep = sum(np.array(reputation).ravel())
             self.reptokens = np.array(reputation).ravel().astype(int)
             self.reputation = np.array([i / float(self.total_rep) for i in reputation])
+
+    class clusternode:
+        def __init__(self,vec,numItems=0,meanVec=None,rep=0,repVec=None, reporterIndexVec=None, dist=-1):
+            # num of events would be == len(vec[i])
+            self.vec=vec
+            #numitems is num reporters in this cluster
+            self.numItems=numItems
+            self.meanVec=meanVec
+            self.rep=rep
+            self.repVec=repVec
+            self.reporterIndexVec = reporterIndexVec
+            self.dist = dist
+    def L2dist(self,v1,v2):
+        return sqrt(sum((v1-v2)**2))
+
+    def newMean(self, cmax):
+        weighted = zeros([cmax.numItems, len(cmax.vec[0])]).astype(float)
+        for i in range(cmax.numItems):
+            weighted[i,:] = cmax.vec[i]*cmax.repVec[i]
+        x = sum(weighted, axis=0)
+        mean = [y / cmax.rep for y in x]
+        logging.warning(mean)
+        return(mean)
+
+    def process(self, clusters, numReporters):
+        mode = None
+        numInMode = 0
+        for i in range(len(clusters)):
+            if(clusters[i].rep > numInMode):
+                numInMode = clusters[i].rep
+                mode = clusters[i]
+        for x in range(len(clusters)):
+            clusters[x].dist = self.L2dist(mode.meanVec,clusters[x].meanVec)
+
+        distMatrix = zeros([numReporters, 1]).astype(float)
+        for x in range(len(clusters)):
+            for i in range(clusters[x].numItems):
+                distMatrix[clusters[x].reporterIndexVec[i]] = clusters[x].dist
+        repVector = zeros([numReporters, 1]).astype(float)
+        for x in range(len(distMatrix)):
+            repVector[x] = 1 / ((1 + distMatrix[x])**2)
+        n = self.normalize(repVector)
+        return(n.flatten())
+
+    # expects a numpy array for reports and rep vector
+    def cluster(self, features, rep, distance=L2dist):
+        #cluster the rows of the "features" matrix
+        distances={}
+        currentclustid=-1
+        clusters = []
+        for i in range(len(features)):
+            # cmax is most similar cluster
+            cmax = None
+            shortestDist = 2**255
+            for n in range(len(clusters)):
+                dist = self.L2dist(features[i], clusters[n].meanVec)
+                if dist<shortestDist:
+                    cmax = clusters[n]
+                    shortestDist = dist
+            if(cmax!=None and self.L2dist(features[i], cmax.meanVec) < 1.50):
+                cmax.vec = concatenate((cmax.vec, array([features[i]])))
+                cmax.numItems += 1
+                cmax.rep += rep[i]
+                cmax.repVec = append(cmax.repVec, rep[i])
+                cmax.meanVec = array(self.newMean(cmax))
+                cmax.reporterIndexVec += [i]
+            else:
+                clusters.append(self.clusternode(array([features[i]]), 1, features[i], rep[i], array(rep[i]), [i]))
+        clusters = self.process(clusters, len(features))
+        return clusters
 
     def normalize(self, v):
         """Proportional distance from zero."""
@@ -292,7 +364,12 @@ class Oracle(object):
                 new_rep_list.append(new_rep[c])
             new_rep_list = np.array(new_rep_list) - min(new_rep_list)
             nc = new_rep_list / sum(new_rep_list)
+            logging.warning(nc)
             self.convergence = True
+
+        elif self.algorithm == "clusterfeck":
+            weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
+            nc = self.cluster(reports_filled, self.reptokens)
 
         elif self.algorithm == "absolute":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
