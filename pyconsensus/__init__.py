@@ -164,7 +164,7 @@ class Oracle(object):
                 distMatrix[clusters[x].reporterIndexVec[i]] = clusters[x].dist
         repVector = zeros([numReporters, 1]).astype(float)
         for x in range(len(distMatrix)):
-            repVector[x] = 1 / ((1 + distMatrix[x])**2)
+            repVector[x] = 1 - distMatrix[x]/amax(distMatrix)
         n = self.normalize(repVector)
         return(n.flatten())
 
@@ -174,6 +174,9 @@ class Oracle(object):
         distances={}
         currentclustid=-1
         clusters = []
+        for n in range(len(rep)):
+            if(rep[n]==0.0):
+                rep[n] = 0.00001
         for i in range(len(features)):
             # cmax is most similar cluster
             cmax = None
@@ -183,7 +186,7 @@ class Oracle(object):
                 if dist<shortestDist:
                     cmax = clusters[n]
                     shortestDist = dist
-            if(cmax!=None and self.L2dist(features[i], cmax.meanVec) < 1.50):
+            if(cmax!=None and self.L2dist(features[i], cmax.meanVec) < 0.50):
                 cmax.vec = concatenate((cmax.vec, array([features[i]])))
                 cmax.numItems += 1
                 cmax.rep += rep[i]
