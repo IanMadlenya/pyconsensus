@@ -245,7 +245,6 @@ class Oracle(object):
                     active_index = 0
                     nan_indices = np.zeros(self.num_reports) + self.num_reports
                     for j in range(self.num_reports):
-                        print "row", j, "col", i
                         if reports_copy[j,i] != NA and not np.isnan(reports_copy[j,i]):
                             total_active_reputation += self.reputation[j]
                             active_reputation[active_index] = self.reputation[j]
@@ -369,8 +368,18 @@ class Oracle(object):
 
         elif self.algorithm == "clusterfeck":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-            nc = self.cluster(reports_filled, self.reptokens)
-            self.convergence = True
+            try:
+                nc = self.cluster(reports_filled, self.reptokens)
+                self.convergence = True
+            except Exception as exc:
+                print "clusterfeck did not complete:", exc
+                print "reports:"
+                print self.reports
+                print "reports filled:"
+                print reports_filled
+                print "reputation:"
+                print self.reputation
+                print self.reptokens
 
         elif self.algorithm == "absolute":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
