@@ -146,7 +146,7 @@ class Oracle(object):
             weighted[i,:] = cmax.vec[i]*cmax.repVec[i]
         x = sum(weighted, axis=0)
         mean = [y / cmax.rep for y in x]
-        logging.warning(mean)
+        # logging.warning(mean)
         return(mean)
 
     def process(self, clusters, numReporters):
@@ -576,7 +576,7 @@ def main(argv=None):
             print(__doc__)
             return 0
         elif opt in ('-t', '--test'):
-            testalgo = "PCA"
+            testalgo = "clusterfeck"
             if arg == "1":
                 reports = np.array([[ YES, YES,  NO,  NO ],
                                     [ YES,  NO,  NO,  NO ],
