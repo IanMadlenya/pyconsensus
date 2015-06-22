@@ -34,13 +34,12 @@ import sys
 import os
 import getopt
 import json
-import warnings
+import warnings; warnings.simplefilter('ignore')
 from collections import Counter
 from pprint import pprint
 from copy import deepcopy
 import numpy as np
 import pandas as pd
-# from matplotlib import pyplot as plt
 from scipy import cluster
 from weightedstats import weighted_median
 from six.moves import xrange as range
@@ -165,6 +164,9 @@ class Oracle(object):
         repVector = zeros([numReporters, 1]).astype(float)
         for x in range(len(distMatrix)):
             repVector[x] = 1 / ((1 + distMatrix[x])**2)
+            # repVector[x] = 1 / (distMatrix[x]+.1)
+        if np.isnan(repVector).any():
+            import ipdb; ipdb.set_trace()
         n = self.normalize(repVector)
         return(n.flatten())
 
@@ -183,7 +185,7 @@ class Oracle(object):
                 if dist<shortestDist:
                     cmax = clusters[n]
                     shortestDist = dist
-            if(cmax!=None and self.L2dist(features[i], cmax.meanVec) < 1.50):
+            if(cmax!=None and self.L2dist(features[i], cmax.meanVec) < 0.50):
                 cmax.vec = concatenate((cmax.vec, array([features[i]])))
                 cmax.numItems += 1
                 cmax.rep += rep[i]
@@ -274,10 +276,10 @@ class Oracle(object):
 
         # Each report's difference from the mean of its event (column)
         wcd = np.matrix(reports_filled - weighted_mean)
-        tokens = [int(r * 1e6) for r in self.reputation]
+        # tokens = [int(r * 1e6) for r in self.reputation]
 
         # Compute the unbiased weighted population covariance
-        covariance_matrix = np.ma.multiply(wcd.T, tokens).dot(wcd) / float(np.sum(tokens) - 1)
+        covariance_matrix = np.ma.multiply(wcd.T, self.reptokens).dot(wcd) / float(np.sum(self.reptokens) - 1)
 
         # H is the un-normalized eigenvector matrix
         try:
