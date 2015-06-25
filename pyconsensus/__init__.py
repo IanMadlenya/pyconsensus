@@ -40,7 +40,7 @@ from pprint import pprint
 from copy import deepcopy
 import numpy as np
 import pandas as pd
-from scipy import cluster
+from scipy import cluster, stats
 from weightedstats import weighted_median
 from six.moves import xrange as range
 from numpy import *
@@ -62,6 +62,11 @@ NO = 1.0
 YES = 2.0
 BAD = 1.5
 NA = 0.0
+
+# NO = 0.0
+# YES = 1.0
+# BAD = 0.5
+# NA = np.nan
 
 def fold(arr, num_cols):
     folded = []
@@ -145,7 +150,6 @@ class Oracle(object):
             weighted[i,:] = cmax.vec[i]*cmax.repVec[i]
         x = sum(weighted, axis=0)
         mean = [y / cmax.rep for y in x]
-        # logging.warning(mean)
         return(mean)
 
     def process(self, clusters, numReporters):
@@ -164,9 +168,6 @@ class Oracle(object):
         repVector = zeros([numReporters, 1]).astype(float)
         for x in range(len(distMatrix)):
             repVector[x] = 1 / ((1 + distMatrix[x])**2)
-            # repVector[x] = 1 / (distMatrix[x]+.1)
-        if np.isnan(repVector).any():
-            import ipdb; ipdb.set_trace()
         n = self.normalize(repVector)
         return(n.flatten())
 
@@ -185,15 +186,18 @@ class Oracle(object):
                 if dist<shortestDist:
                     cmax = clusters[n]
                     shortestDist = dist
-            if(cmax!=None and self.L2dist(features[i], cmax.meanVec) < 0.50):
+            if cmax != None and self.L2dist(features[i], cmax.meanVec) < 0.50:
                 cmax.vec = concatenate((cmax.vec, array([features[i]])))
                 cmax.numItems += 1
                 cmax.rep += rep[i]
+                if cmax.rep == 0:
+                    cmax.rep = 0.0000000001
                 cmax.repVec = append(cmax.repVec, rep[i])
                 cmax.meanVec = array(self.newMean(cmax))
                 cmax.reporterIndexVec += [i]
             else:
-                clusters.append(clusternode(array([features[i]]), 1, features[i], rep[i], array(rep[i]), [i]))
+                if not np.isnan(features[i]).any():
+                    clusters.append(clusternode(array([features[i]]), 1, features[i], rep[i], array(rep[i]), [i]))
         clusters = self.process(clusters, len(features))
         return clusters
 
@@ -323,8 +327,14 @@ class Oracle(object):
         # Use the largest eigenvector only
         if self.algorithm == "PCA":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-            nc = self.nonconformity(first_score, reports_filled)
+            nc = self.nonconformity_rank(first_score, reports_filled)
+            # nc = self.nonconformity(first_score, reports_filled)
             scores = first_score
+
+        # elif self.algorithm == "oldtruthcoin":
+        #     weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
+        #     nc = self.nonconformity(first_score, reports_filled)
+        #     scores = first_score
 
         elif self.algorithm == "big-five":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
@@ -374,42 +384,12 @@ class Oracle(object):
                 new_rep_list.append(new_rep[c])
             new_rep_list = np.array(new_rep_list) - min(new_rep_list)
             nc = new_rep_list / sum(new_rep_list)
-            # logging.warning(nc)
             self.convergence = True
 
         elif self.algorithm == "clusterfeck":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-            try:
-                nc = self.cluster(reports_filled, self.reptokens)
-                self.convergence = True
-            except Exception as exc:
-                print "clusterfeck did not complete:", exc
-                print "reports:"
-                print self.reports
-                print "reports filled:"
-                print reports_filled
-                print "reputation fraction:"
-                print self.reputation
-                print "rep tokens:"
-                print self.reptokens
-
-        elif self.algorithm == "absolute":
-            weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-            U, Sigma, Vt = np.linalg.svd(covariance_matrix)
-            net_score = np.zeros(self.num_reports)
-            for i in range(self.max_components):
-                loading = U.T[i]
-                if loading[0] < 0:
-                    loading *= -1
-                score = Sigma[i] * wcd.dot(loading)
-                net_score += np.abs(score)
-                if self.verbose:
-                    print "  Eigenvector %d:" % i, np.round(loading, 6)
-                    print "  Eigenvalue %d: " % i, Sigma[i]
-                    print "  Projection:    ", np.round(score, 6)
-                    print "  Nonconformity:", np.round(net_score, 6)
-                    print
-            nc = self.nonconformity(net_score, reports_filled)
+            nc = self.cluster(reports_filled, self.reptokens)
+            self.convergence = True
 
         # Fixed-variance threshold: eigenvalue-weighted sum of score vectors
         elif self.algorithm == "fixed-variance":
@@ -468,6 +448,21 @@ class Oracle(object):
         ref_ind = np.sum((new1 - old)**2) - np.sum((new2 - old)**2)
         self.convergence = True
         nc = set1 if ref_ind <= 0 else set2
+        return nc
+
+    def nonconformity_rank(self, scores, reports):
+        set1 = scores + np.abs(np.min(scores))
+        set2 = scores - np.max(scores)
+        old = np.dot(self.reputation.T, reports)
+        rank_old = stats.rankdata(old)
+        new1 = stats.rankdata(np.dot(self.normalize(set1), reports) + 0.01*old)
+        new2 = stats.rankdata(np.dot(self.normalize(set2), reports) + 0.01*old)
+        ref_ind = np.sum(np.abs(new1 - rank_old)) - np.sum(np.abs(new2 - rank_old))
+        if ref_ind == 0:
+            nc = self.nonconformity(scores, reports)
+        else:
+            nc = set1 if ref_ind < 0 else set2
+        self.convergence = True
         return nc
 
     def consensus(self):
@@ -597,7 +592,7 @@ def main(argv=None):
             print(__doc__)
             return 0
         elif opt in ('-t', '--test'):
-            testalgo = "clusterfeck"
+            testalgo = "PCA"
             if arg == "1":
                 reports = np.array([[ YES, YES,  NO,  NO ],
                                     [ YES,  NO,  NO,  NO ],
