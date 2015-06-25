@@ -333,13 +333,7 @@ class Oracle(object):
         if self.algorithm == "PCA":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
             nc = self.nonconformity_rank(first_score, reports_filled)
-            # nc = self.nonconformity(first_score, reports_filled)
             scores = first_score
-
-        # elif self.algorithm == "oldtruthcoin":
-        #     weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
-        #     nc = self.nonconformity(first_score, reports_filled)
-        #     scores = first_score
 
         elif self.algorithm == "big-five":
             weighted_mean, wcd, covariance_matrix, first_loading, first_score = self.wpca(reports_filled)
