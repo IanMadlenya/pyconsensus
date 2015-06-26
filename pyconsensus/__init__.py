@@ -186,12 +186,12 @@ class Oracle(object):
                     cmax = clusters[n]
                     shortestDist = dist
             if cmax != None and self.L2dist(features[i], cmax.meanVec) < 0.50:
-                cmax.vec = concatenate((cmax.vec, np.array([features[i]])))
+                cmax.vec = np.concatenate((cmax.vec, np.array([features[i]])))
                 cmax.numItems += 1
                 cmax.rep += rep[i]
                 if cmax.rep == 0:
                     cmax.rep = 0.0000000001
-                cmax.repVec = append(cmax.repVec, rep[i])
+                cmax.repVec = np.append(cmax.repVec, rep[i])
                 cmax.meanVec = np.array(self.newMean(cmax))
                 cmax.reporterIndexVec += [i]
             else:
@@ -591,7 +591,7 @@ def main(argv=None):
             print(__doc__)
             return 0
         elif opt in ('-t', '--test'):
-            testalgo = "PCA"
+            testalgo = "hierarchical"
             if arg == "1":
                 reports = np.array([[ YES, YES,  NO,  NO ],
                                     [ YES,  NO,  NO,  NO ],
