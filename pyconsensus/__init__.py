@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Consensus mechanism for Augur/Truthcoin.
+"""Augur event consensus
 
-pyconsensus is a Python implementation of the Augur/Truthcoin consensus
-mechanism, described in detail at https://github.com/psztorc/Truthcoin.
+pyconsensus is a standalone Python implementation of Augur's consensus
+mechanism.  For details, please see the Augur whitepaper: http://augur.link/augur.pdf
 
 Usage:
 
@@ -12,20 +12,23 @@ Usage:
     # Example report matrix:
     #   - each row represents a reporter
     #   - each column represents an event in a prediction market
-    my_reports = [[0.2, 0.7, -1, -1],
-                  [0.3, 0.5, -1, -1],
-                  [0.1, 0.7, -1, -1],
-                  [0.5, 0.7,  1, -1],
-                  [0.1, 0.2,  1,  1],
-                  [0.1, 0.2,  1,  1]]
+    my_reports = [[0.2, 0.7,  1,  1],
+                  [0.3, 0.5,  1,  1],
+                  [0.1, 0.7,  1,  1],
+                  [0.5, 0.7,  2,  1],
+                  [0.1, 0.2,  2,  2],
+                  [0.1, 0.2,  2,  2]]
+    reputation = [1, 2, 10, 9, 4, 2]
     my_event_bounds = [
         {"scaled": True, "min": 0.1, "max": 0.5},
         {"scaled": True, "min": 0.2, "max": 0.7},
-        {"scaled": False, "min": -1, "max": 1},
-        {"scaled": False, "min": -1, "max": 1},
+        {"scaled": False, "min":  1, "max": 2},
+        {"scaled": False, "min":  1, "max": 2},
     ]
 
-    oracle = Oracle(reports=my_reports, event_bounds=my_event_bounds)
+    oracle = Oracle(reports=my_reports,
+                    reputation=reputation,
+                    event_bounds=my_event_bounds)
     oracle.consensus()
 
 """
@@ -33,26 +36,22 @@ from __future__ import division, absolute_import
 import sys
 import os
 import getopt
-import json
-import warnings; warnings.simplefilter('ignore')
+import warnings
 from collections import Counter
-from pprint import pprint
-from copy import deepcopy
 import numpy as np
 import pandas as pd
 from scipy import cluster, stats
 from weightedstats import weighted_median
 from six.moves import xrange as range
-from numpy import *
-import logging
 
 __title__      = "pyconsensus"
-__version__    = "0.5.7"
-__author__     = "Jack Peterson and Paul Sztorc"
+__version__    = "0.5.8"
+__author__     = "Jack Peterson, Joey Krug, Paul Sztorc"
 __license__    = "GPL"
 __maintainer__ = "Jack Peterson"
 __email__      = "jack@tinybike.net"
 
+warnings.simplefilter('ignore')
 pd.set_option("display.max_rows", 25)
 pd.set_option("display.width", 1000)
 np.set_printoptions(linewidth=225,
@@ -82,14 +81,15 @@ def fold(arr, num_cols):
     return folded
 
 class clusternode:
-    def __init__(self,vec,numItems=0,meanVec=None,rep=0,repVec=None, reporterIndexVec=None, dist=-1):
+    def __init__(self, vec, numItems=0, meanVec=None, rep=0, repVec=None,
+                 reporterIndexVec=None, dist=-1):
         # num of events would be == len(vec[i])
-        self.vec=vec
-        #numitems is num reporters in this cluster
-        self.numItems=numItems
-        self.meanVec=meanVec
-        self.rep=rep
-        self.repVec=repVec
+        self.vec = vec
+        # numitems is num reporters in this cluster
+        self.numItems = numItems
+        self.meanVec = meanVec
+        self.rep = rep
+        self.repVec = repVec
         self.reporterIndexVec = reporterIndexVec
         self.dist = dist
 
@@ -97,7 +97,7 @@ class Oracle(object):
 
     def __init__(self, reports=None, event_bounds=None, reputation=None,
                  catch_tolerance=0.1, alpha=0.1, verbose=False,
-                 aux=None, algorithm="PCA", variance_threshold=0.9,
+                 aux=None, algorithm="fixed-variance", variance_threshold=0.9,
                  max_components=5, hierarchy_threshold=0.5):
         """
         Args:
@@ -141,16 +141,16 @@ class Oracle(object):
             self.reputation = np.array([i / float(self.total_rep) for i in reputation])
         self.reptokens = [int(r * 1e6) for r in self.reputation]
 
-    def L2dist(self,v1,v2):
-        return sqrt(sum((v1-v2)**2))
+    def L2dist(self, v1, v2):
+        return np.sqrt(np.sum((v1 - v2)**2))
 
     def newMean(self, cmax):
-        weighted = zeros([cmax.numItems, len(cmax.vec[0])]).astype(float)
+        weighted = np.zeros([cmax.numItems, len(cmax.vec[0])]).astype(float)
         for i in range(cmax.numItems):
             weighted[i,:] = cmax.vec[i]*cmax.repVec[i]
-        x = sum(weighted, axis=0)
+        x = np.sum(weighted, axis=0)
         mean = [y / cmax.rep for y in x]
-        return(mean)
+        return mean
 
     def process(self, clusters, numReporters):
         mode = None
@@ -160,49 +160,49 @@ class Oracle(object):
                 numInMode = clusters[i].rep
                 mode = clusters[i]
         for x in range(len(clusters)):
-            clusters[x].dist = self.L2dist(mode.meanVec,clusters[x].meanVec)
-        distMatrix = zeros([numReporters, 1]).astype(float)
+            clusters[x].dist = self.L2dist(mode.meanVec, clusters[x].meanVec)
+        distMatrix = np.zeros([numReporters, 1]).astype(float)
         for x in range(len(clusters)):
             for i in range(clusters[x].numItems):
                 distMatrix[clusters[x].reporterIndexVec[i]] = clusters[x].dist
-        repVector = zeros([numReporters, 1]).astype(float)
+        repVector = np.zeros([numReporters, 1]).astype(float)
         for x in range(len(distMatrix)):
-            repVector[x] = 1 - distMatrix[x]/amax(distMatrix)
-            # repVector[x] = 1 / ((1 + distMatrix[x])**2)
-            # repVector[x] = 1 / (distMatrix[x]+.1)
-        n = self.normalize(repVector)
-        return(n.flatten())
+            repVector[x] = 1 / ((1 + distMatrix[x])**2)
+        return self.normalize(repVector).flatten()
 
     # expects a numpy array for reports and rep vector
     def cluster(self, features, rep, distance=L2dist):
-        #cluster the rows of the "features" matrix
-        distances={}
-        currentclustid=-1
+        # cluster the rows of the "features" matrix
+        distances = {}
+        currentclustid = -1
         clusters = []
-        for n in range(len(rep)):
-            if(rep[n]==0.0):
-                rep[n] = 0.00001
         for i in range(len(features)):
             # cmax is most similar cluster
             cmax = None
             shortestDist = 2**255
             for n in range(len(clusters)):
                 dist = self.L2dist(features[i], clusters[n].meanVec)
-                if dist<shortestDist:
+                if dist < shortestDist:
                     cmax = clusters[n]
                     shortestDist = dist
             if cmax != None and self.L2dist(features[i], cmax.meanVec) < 0.50:
-                cmax.vec = concatenate((cmax.vec, array([features[i]])))
+                cmax.vec = concatenate((cmax.vec, np.array([features[i]])))
                 cmax.numItems += 1
                 cmax.rep += rep[i]
                 if cmax.rep == 0:
                     cmax.rep = 0.0000000001
                 cmax.repVec = append(cmax.repVec, rep[i])
-                cmax.meanVec = array(self.newMean(cmax))
+                cmax.meanVec = np.array(self.newMean(cmax))
                 cmax.reporterIndexVec += [i]
             else:
-                if not np.isnan(features[i]).any():
-                    clusters.append(clusternode(array([features[i]]), 1, features[i], rep[i], array(rep[i]), [i]))
+                clusters.append(
+                    clusternode(np.array([features[i]]),
+                                1,
+                                features[i],
+                                rep[i],
+                                np.array(rep[i]),
+                                [i])
+                )
         clusters = self.process(clusters, len(features))
         return clusters
 
@@ -307,7 +307,7 @@ class Oracle(object):
         """Weights are the number of coins people start with, so the aim of this
         weighting is to count 1 report for each of their coins -- e.g., guy with 10
         coins effectively gets 10 reports, guy with 1 coin gets 1 report, etc.
-        
+
         The reports matrix has reporters as rows and events as columns.
 
         """
@@ -612,19 +612,19 @@ def main(argv=None):
                                     [ YES, YES, YES,  NO ],
                                     [ YES, YES, YES,  NO ]])
             elif arg == "3":
-                reports =  np.array([[ YES,  YES,   NO,  NO,  YES,  YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
-                                     [ YES,  YES,   NO,  NO,  YES,  YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
-                                     [ YES,  YES,   NO,  NO,  YES,  YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
-                                     [ YES,  YES,   NO,  NO,  YES,  YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
-                                     [ YES,  YES,   NO,  NO,  YES,  YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
-                                     [ YES,  YES,   NO,  NO,  YES,  YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
+                reports =  np.array([[ YES,  YES,   NO,  NO,  YES, YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
+                                     [ YES,  YES,   NO,  NO,  YES, YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
+                                     [ YES,  YES,   NO,  NO,  YES, YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
+                                     [ YES,  YES,   NO,  NO,  YES, YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
+                                     [ YES,  YES,   NO,  NO,  YES, YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
+                                     [ YES,  YES,   NO,  NO,  YES, YES,  NO,   NO,  YES,  YES,   NO,   NO,  YES],
 
-                                     [  NO,   NO,   NO, YES,   NO,   NO,  NO,  YES,   NO,   NO,   NO,  YES,   NO],
-                                     
-                                     [ YES,  YES,  YES,  NO,  YES,  YES,  YES,  NO,  YES,  YES,  YES,   NO,  YES],
-                                     [ YES,  YES,  YES,  NO,  YES,  YES,  YES,  NO,  YES,  YES,  YES,   NO,  YES],
-                                     [ YES,  YES,  YES,  NO,  YES,  YES,  YES,  NO,  YES,  YES,  YES,   NO,  YES],
-                                     [ YES,  YES,  YES,  NO,  YES,  YES,  YES,  NO,  YES,  YES,  YES,   NO,  YES]])
+                                     [  NO,   NO,   NO, YES,   NO, NO,  NO,  YES,   NO,   NO,   NO,  YES,   NO],
+
+                                     [ YES,  YES,  YES,  NO,  YES, YES,  YES,  NO,  YES,  YES,  YES,   NO,  YES],
+                                     [ YES,  YES,  YES,  NO,  YES, YES,  YES,  NO,  YES,  YES,  YES,   NO,  YES],
+                                     [ YES,  YES,  YES,  NO,  YES, YES,  YES,  NO,  YES,  YES,  YES,   NO,  YES],
+                                     [ YES,  YES,  YES,  NO,  YES, YES,  YES,  NO,  YES,  YES,  YES,   NO,  YES]])
             elif arg == "4":
                 reports =  np.array([[ YES,  YES,   NO,   NO,  YES ],
                                      [ YES,  YES,   NO,   NO,  YES ],
@@ -655,11 +655,11 @@ def main(argv=None):
             elif arg == "5":
                 reports = np.array([[ BAD,  NO,  NO, YES,  NO,  NO, YES, YES, BAD, BAD ],
                                     [ BAD, BAD,  NO, BAD, BAD, YES, YES, BAD, YES, BAD ],
-                                    [  NO, YES, BAD, BAD,  NO, YES,  NO,  NO, BAD, BAD ],
-                                    [ BAD, BAD, BAD, BAD, BAD,  NO,  NO,  NO, BAD, YES ],
+                                    [  NO, YES, BAD, BAD,  NO, YES, NO,  NO, BAD, BAD ],
+                                    [ BAD, BAD, BAD, BAD, BAD,  NO, NO,  NO, BAD, YES ],
                                     [  NO, YES, YES, BAD, BAD, YES, BAD, YES, BAD, YES ],
-                                    [  NO, YES, YES, YES,  NO, BAD,  NO, BAD, BAD, BAD ],
-                                    [  NO,  NO,  NO, YES,  NO,  NO,  NO, YES, BAD, YES ],
+                                    [  NO, YES, YES, YES,  NO, BAD, NO, BAD, BAD, BAD ],
+                                    [  NO,  NO,  NO, YES,  NO,  NO, NO, YES, BAD, YES ],
                                     [ BAD, BAD, BAD, YES, BAD, YES, BAD, BAD, YES,  NO ],
                                     [ BAD, BAD, BAD,  NO, BAD, YES, YES,  NO,  NO, BAD ],
                                     [ BAD, YES, BAD, YES,  NO,  NO, YES, YES,  NO, BAD ],
@@ -674,31 +674,30 @@ def main(argv=None):
                                     [  NO,  NO,  NO, YES, YES, YES, BAD, YES, BAD,  NO ],
                                     [ BAD, BAD, BAD, YES, BAD, YES, BAD, BAD, YES,  NO ]])
             elif arg == "6":
-                reports = np.array([[  NO,   NO,  YES,  YES,   NO,  YES,   NO,   NO,   NO,   NO ],
-                                    [ YES,  YES,   NO,   NO,   NO,  YES,  YES,  YES,   NO,  YES ],
-                                    [ YES,  YES,   NO,  YES,   NO,  YES,  YES,   NO,  YES,  YES ],
-                                    [  NO,  YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,  YES ],
-                                    [  NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,   NO,   NO ],
-                                    [  NO,  YES,   NO,   NO,   NO,  YES,  YES,   NO,  YES,  YES ],
-                                    [ YES,   NO,   NO,  YES,  YES,   NO,  YES,   NO,   NO,   NO ],
-                                    [ YES,  YES,   NO,   NO,  YES,   NO,  YES,  YES,  YES,   NO ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [  NO,  YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,  YES ]])
+                reports = np.array([[  NO,   NO,  YES,  YES,   NO, YES,   NO,   NO,   NO,   NO ],
+                                    [ YES,  YES,   NO,   NO,   NO, YES,  YES,  YES,   NO,  YES ],
+                                    [ YES,  YES,   NO,  YES,   NO, YES,  YES,   NO,  YES,  YES ],
+                                    [  NO,  YES,   NO,   NO,  YES, NO,  YES,   NO,   NO,  YES ],
+                                    [  NO,   NO,  YES,   NO,  YES, NO,   NO,   NO,   NO,   NO ],
+                                    [  NO,  YES,   NO,   NO,   NO, YES,  YES,   NO,  YES,  YES ],
+                                    [ YES,   NO,   NO,  YES,  YES, NO,  YES,   NO,   NO,   NO ],
+                                    [ YES,  YES,   NO,   NO,  YES, NO,  YES,  YES,  YES,   NO ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [  NO,  YES,   NO,   NO,  YES, NO,  YES,   NO,   NO,  YES ]])
             elif arg == "7":
                 reports = np.array([[ YES, YES, YES, YES, YES, YES ],
                                     [ YES, YES, YES,  NO,  NO,  NO ],
                                     [  NA,  NA,  NA,  NA,  NA,  NA ]])
-                                    # [ np.nan, np.nan, np.nan, np.nan, np.nan, np.nan]])
             elif arg == "8":
                 reports = np.array([[ YES, YES, YES, YES, YES, YES ],
                                     [ YES, YES, YES,  NO,  NA,  NA ],
@@ -760,26 +759,26 @@ def main(argv=None):
                                      [ YES,  YES,   NO,   NO,  YES ],
                                      [ YES,  YES,   NO,   NO,  YES ]])
             elif arg == "16":
-                reports = np.array([[  NO,   NO,  YES,  YES,   NO,  YES,   NO,   NO,   NO,   NO ],
-                                    [ YES,  YES,   NO,   NO,   NO,  YES,  YES,  YES,   NO,  YES ],
-                                    [ YES,  YES,   NO,  YES,   NO,  YES,  YES,   NO,  YES,  YES ],
-                                    [  NO,  YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,  YES ],
-                                    [  NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,   NO,   NO ],
-                                    [  NO,  YES,   NO,   NO,   NO,  YES,  YES,   NO,  YES,  YES ],
-                                    [ YES,   NO,   NO,  YES,  YES,   NO,  YES,   NO,   NO,   NO ],
-                                    [ YES,  YES,   NO,   NO,  YES,   NO,  YES,  YES,  YES,   NO ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [ YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,   NO,  YES ],
-                                    [  NO,  YES,   NO,   NO,  YES,   NO,  YES,   NO,   NO,  YES ]])
+                reports = np.array([[  NO,   NO,  YES,  YES,   NO, YES,   NO,   NO,   NO,   NO ],
+                                    [ YES,  YES,   NO,   NO,   NO, YES,  YES,  YES,   NO,  YES ],
+                                    [ YES,  YES,   NO,  YES,   NO, YES,  YES,   NO,  YES,  YES ],
+                                    [  NO,  YES,   NO,   NO,  YES, NO,  YES,   NO,   NO,  YES ],
+                                    [  NO,   NO,  YES,   NO,  YES, NO,   NO,   NO,   NO,   NO ],
+                                    [  NO,  YES,   NO,   NO,   NO, YES,  YES,   NO,  YES,  YES ],
+                                    [ YES,   NO,   NO,  YES,  YES, NO,  YES,   NO,   NO,   NO ],
+                                    [ YES,  YES,   NO,   NO,  YES, NO,  YES,  YES,  YES,   NO ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [ YES,   NO,   NO,  YES,   NO, YES,   NO,   NO,   NO,  YES ],
+                                    [  NO,  YES,   NO,   NO,  YES, NO,  YES,   NO,   NO,  YES ]])
             elif arg == "17":
                 reports = np.array([[ YES, YES,  NO,  NO ],
                                     [ YES,  NO,  NO,  NO ],
