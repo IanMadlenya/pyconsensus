@@ -171,16 +171,16 @@ class Oracle(object):
 
         # detect how far the "truthers" are away from actual outcomes
         # then choose closer mode as final truth cluster
-        if(L2dist(mode.meanVec, outcomes)<bestDist):
-            bestDist = L2dist(mode.meanVec, outcomes)
+        if(self.L2dist(mode.meanVec, outcomes)<bestDist):
+            bestDist = self.L2dist(mode.meanVec, outcomes)
             best = mode
             bestClusters = clusters
-        if(L2dist(mode.meanVec,outcomes)>1.07 and times==1):
+        if(self.L2dist(mode.meanVec,outcomes)>1.07 and times==1):
             possAltCluster = cluster(features,rep,2,threshold*3)
             return(possAltCluster)
 
         for x in range(len(bestClusters)):
-            bestClusters[x].dist = L2dist(best.meanVec,bestClusters[x].meanVec)
+            bestClusters[x].dist = self.L2dist(best.meanVec,bestClusters[x].meanVec)
 
         distMatrix = zeros([numReporters, 1]).astype(float)
         for x in range(len(bestClusters)):
