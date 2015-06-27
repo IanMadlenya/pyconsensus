@@ -189,8 +189,6 @@ class Oracle(object):
         repVector = zeros([numReporters, 1]).astype(float)
         for x in range(len(distMatrix)):
             repVector[x] = 1 - distMatrix[x]/(amax(distMatrix)+0.00000001)
-        logging.warning(normalize(repVector))
-        logging.warning(distMatrix)
         return(self.normalize(repVector).flatten())
 
     def outsideCluster(self,features,rep,threshold=0.50):
