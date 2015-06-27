@@ -46,6 +46,10 @@ from six.moves import xrange as range
 from numpy import *
 import logging
 
+best = None
+bestDist = 2**255
+bestClusters = None
+
 __title__      = "pyconsensus"
 __version__    = "0.5.7"
 __author__     = "Jack Peterson and Paul Sztorc"
@@ -152,27 +156,41 @@ class Oracle(object):
         mean = [y / cmax.rep for y in x]
         return(mean)
 
-    def process(self, clusters, numReporters, times, features, rep):
+    def process(self, clusters, numReporters, times, features, rep, threshold):
         mode = None
         numInMode = 0
+        global best
+        global bestClusters
+        global bestDist
         for i in range(len(clusters)):
             if(clusters[i].rep > numInMode):
                 numInMode = clusters[i].rep
                 mode = clusters[i]
-        outcomes = np.ma.average(features, axis=0, weights=rep)
-        if(self.L2dist(mode.meanVec,outcomes)>1.07 and times==1):
-            return(self.cluster(features,rep,2,1.50))
 
-        for x in range(len(clusters)):
-            clusters[x].dist = self.L2dist(mode.meanVec,clusters[x].meanVec)
+        outcomes = np.ma.average(features, axis=0, weights=rep)
+
+        # detect how far the "truthers" are away from actual outcomes
+        # then choose closer mode as final truth cluster
+        if(L2dist(mode.meanVec, outcomes)<bestDist):
+            bestDist = L2dist(mode.meanVec, outcomes)
+            best = mode
+            bestClusters = clusters
+        if(L2dist(mode.meanVec,outcomes)>1.07 and times==1):
+            possAltCluster = cluster(features,rep,2,threshold*3)
+            return(possAltCluster)
+
+        for x in range(len(bestClusters)):
+            bestClusters[x].dist = L2dist(best.meanVec,bestClusters[x].meanVec)
 
         distMatrix = zeros([numReporters, 1]).astype(float)
-        for x in range(len(clusters)):
-            for i in range(clusters[x].numItems):
-                distMatrix[clusters[x].reporterIndexVec[i]] = clusters[x].dist
+        for x in range(len(bestClusters)):
+            for i in range(bestClusters[x].numItems):
+                distMatrix[bestClusters[x].reporterIndexVec[i]] = bestClusters[x].dist
         repVector = zeros([numReporters, 1]).astype(float)
         for x in range(len(distMatrix)):
-            repVector[x] = 1 - distMatrix[x]/amax(distMatrix)
+            repVector[x] = 1 - distMatrix[x]/(amax(distMatrix)+0.00000001)
+        logging.warning(normalize(repVector))
+        logging.warning(distMatrix)
         return(self.normalize(repVector).flatten())
 
     def outsideCluster(self,features,rep,threshold=0.50):
@@ -218,7 +236,7 @@ class Oracle(object):
                 if not np.isnan(features[i]).any():
                     clusters = append(clusters, clusternode(array([features[i]]), 1, features[i], rep[i], array(rep[i]), [i]))
         clusters = delete(clusters, 0)
-        clusters = self.process(clusters, len(features), times, features, rep)
+        clusters = self.process(clusters, len(features), times, features, rep, threshold)
         return clusters
 
     def normalize(self, v):
