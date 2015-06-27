@@ -176,7 +176,7 @@ class Oracle(object):
             best = mode
             bestClusters = clusters
         if(self.L2dist(mode.meanVec,outcomes)>1.07 and times==1):
-            possAltCluster = cluster(features,rep,2,threshold*3)
+            possAltCluster = self.cluster(features,rep,2,threshold*3)
             return(possAltCluster)
 
         for x in range(len(bestClusters)):
