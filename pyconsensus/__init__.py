@@ -194,6 +194,8 @@ class Oracle(object):
     def outsideCluster(self,features,rep,threshold=0.50):
         if(threshold==0.50):
             threshold = np.log10(len(features[0]))/1.77
+            if(threshold==0):
+                threshold = 0.3
         global best
         global bestDist
         global bestClusters
