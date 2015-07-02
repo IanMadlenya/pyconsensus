@@ -208,6 +208,8 @@ class Oracle(object):
         distances={}
         if(threshold==0.50):
             threshold = np.log10(len(features[0]))/1.77
+            if(threshold==0):
+                threshold = 0.3
         currentclustid=-1
         clusters = empty(1, dtype=object)
         for n in range(len(rep)):
